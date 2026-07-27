@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rocket Classic (TEST) — Make Your Picks</title>
+<style>
+  :root{
+    --green:#155724; --green-dark:#0d3a19; --gold:#c9a227; --bg:#f4f6f4;
+    --card:#ffffff; --border:#d7ddd7; --red:#b3261e; --text:#1b1f1b;
+  }
+  *{box-sizing:border-box;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg); color:var(--text); margin:0; padding:0 0 60px;
+  }
+  header{
+    background:linear-gradient(135deg,var(--green-dark),var(--green));
+    color:#fff; padding:28px 20px 22px; text-align:center;
+  }
+  header h1{margin:0 0 6px; font-size:1.5rem;}
+  header p{margin:0; opacity:.9; font-size:.95rem;}
+  .wrap{max-width:820px; margin:0 auto; padding:20px;}
+  .card{
+    background:var(--card); border:1px solid var(--border); border-radius:10px;
+    padding:20px; margin-bottom:18px; box-shadow:0 1px 3px rgba(0,0,0,.04);
+  }
+  .card h2{margin-top:0; font-size:1.15rem; border-bottom:2px solid var(--gold); padding-bottom:8px;}
+  label{display:block; font-weight:600; font-size:.85rem; margin:12px 0 4px;}
+  input[type=text], select{
+    width:100%; padding:9px 10px; border:1px solid var(--border); border-radius:6px;
+    font-size:1rem; background:#fff;
+  }
+  .pickrow{display:grid; grid-template-columns:28px 1fr; gap:8px; align-items:center; margin-bottom:8px;}
+  .picknum{font-weight:700; color:var(--green); text-align:right; font-size:.9rem;}
+  .altrow{margin-top:14px; padding-top:12px; border-top:1px dashed var(--border);}
+  .altrow label{color:var(--red);}
+  .groupmeta{font-size:.8rem; color:#556; margin-bottom:10px;}
+  .err{color:var(--red); font-size:.85rem; margin-top:6px; display:none;}
+  .actions{position:sticky; bottom:0; background:var(--bg); padding:16px 0 4px;}
+  button{
+    width:100%; padding:14px; font-size:1.05rem; font-weight:700; border:none;
+    border-radius:8px; cursor:pointer; margin-bottom:10px;
+  }
+  #submitBtn{background:var(--green); color:#fff;}
+  #submitBtn:hover{background:var(--green-dark);}
+  .secondary{background:#fff; border:1px solid var(--border) !important; color:var(--text);}
+  #summary{display:none;}
+  #summary textarea{
+    width:100%; height:150px; font-family:ui-monospace,Menlo,Consolas,monospace;
+    font-size:.8rem; padding:10px; border:1px solid var(--border); border-radius:6px;
+  }
+  .status{padding:10px 14px; border-radius:6px; font-size:.9rem; margin-bottom:12px;}
+  .status.ok{background:#e6f4ea; color:var(--green-dark); border:1px solid #b9dcc2;}
+  .note{font-size:.8rem; color:#667; line-height:1.4;}
+  .flex-btns{display:flex; gap:10px;}
+  .flex-btns button{flex:1;}
+  #gateOverlay{
+    position:fixed; inset:0; background:linear-gradient(135deg,var(--green-dark),var(--green));
+    display:flex; align-items:center; justify-content:center; z-index:1000; padding:20px;
+  }
+  .gateCard{
+    background:#fff; border-radius:12px; padding:32px 28px; max-width:360px; width:100%;
+    text-align:center; box-shadow:0 8px 24px rgba(0,0,0,.25);
+  }
+  .gateCard h2{margin:0 0 6px; font-size:1.2rem; color:var(--green-dark);}
+  .gateCard p{margin:0 0 16px; font-size:.85rem; color:#556;}
+  .gateCard input{margin-bottom:10px; text-align:center;}
+  .gateCard button{background:var(--green); color:#fff;}
+  .gateErr{color:var(--red); font-size:.85rem; min-height:18px; margin-bottom:6px;}
+  #mainContent{display:none;}
+</style>
+</head>
+<body>
+
+<div id="gateOverlay">
+  <div class="gateCard">
+    <h2>🔒 Entry Password Required</h2>
+    <p>This pool is by invitation only. Enter the password shared with entrants to make your picks.</p>
+    <input type="password" id="gatePassword" placeholder="Password" autocomplete="off">
+    <div class="gateErr" id="gateErr"></div>
+    <button id="gateBtn" type="button">Enter</button>
+  </div>
+</div>
+
+<div id="mainContent">
+<header>
+  <h1>Rocket Classic (TEST)</h1>
+  <p id="eventLabel">Detroit Golf Club</p>
+</header>
+
+<div class="wrap">
+
+  <div class="card">
+    <h2>Your Info</h2>
+    <label for="entrantName">Your Name (exactly as you want it on the leaderboard)</label>
+    <input type="text" id="entrantName" placeholder="e.g. Jeff Neher" autocomplete="name">
+    <div class="err" id="nameErr">Please enter your name.</div>
+    <p class="note">Pick from each of the 5 groups below (5 from Group A, 4 from Group B, 3 from Group C, 2 from Group D, 1 from Group E — 15 total), plus 1 alternate per group. The alternate only comes into play if one of your picks in that group withdraws before or during Round 1 or 2. No duplicate golfers across your whole team.</p>
+  </div>
+
+  <div id="groupsContainer"></div>
+
+  <div class="card" id="summary">
+    <h2>Review &amp; Send</h2>
+    <div class="status ok" id="okMsg">Looks good! Choose how to send your picks below.</div>
+    <label>Plain-text summary (for email/text)</label>
+    <textarea id="summaryText" readonly></textarea>
+    <label style="margin-top:14px;">Data row (paste directly into the Picks tab)</label>
+    <textarea id="csvText" readonly style="height:60px;"></textarea>
+  </div>
+
+  <div class="actions">
+    <div id="validationErr" class="err" style="text-align:center;"></div>
+    <button id="submitBtn" type="button">Review My Picks</button>
+    <div class="flex-btns" id="sendBtns" style="display:none;">
+      <button class="secondary" id="emailBtn" type="button">📧 Email My Picks</button>
+      <button class="secondary" id="copyBtn" type="button">📋 Copy Data Row</button>
+    </div>
+  </div>
+
+</div>
+</div><!-- /mainContent -->
+
+<script>
+/* ====================== CONFIG — edit this each tournament ====================== */
+const TOURNAMENT_NAME = "Rocket Classic (TEST) \u2014 Detroit Golf Club";
+const SEND_TO_EMAIL = "jeff.neher@gmail.com"; // change to whoever collects picks (e.g. Chip Brunt)
+const ENTRY_PASSWORD = "Detroit2026"; // change this each tournament and share it with entrants only
+const GROUP_PICKS = {"Group A": 5, "Group B": 4, "Group C": 3, "Group D": 2, "Group E": 1}; // picks per group (15 total)
+const GROUPS = {"Group A": ["Cameron Young", "Russell Henley", "Wyndham Clark", "Xander Schauffele", "J.J. Spaun", "Chris Gotterup", "Ben Griffin", "Si Woo Kim", "Harris English", "Jacob Bridgeman", "Ryan Gerard", "Hideki Matsuyama", "Akshay Bhatia", "Nicolai Højgaard", "Maverick McNealy", "Patrick Cantlay", "Keegan Bradley", "Rickie Fowler", "Jake Knapp", "Sam Stevens", "Jason Day", "Marco Penge", "Jordan Spieth", "Michael Kim", "Nico Echavarria"], "Group B": ["Corey Conners", "Matt McCarty", "Pierceson Coody", "Michael Brennan", "Ryo Hisatsune", "Andrew Novak", "Nick Taylor", "Eric Cole", "Harry Hall", "Max Greyserman", "Aldrich Potgieter", "Johnny Keefer", "Matti Schmid", "Jordan Smith", "Sungjae Im", "Michael Thorbjornsen", "Rasmus Højgaard", "Matt Wallace", "Patrick Rodgers", "John Parry", "Rasmus Neergaard-Petersen", "Andrew Putnam", "Mac Meissner", "Rico Hoey", "Taylor Pendrith"], "Group C": ["Max McGreevy", "Haotong Li", "Ricky Castillo", "Christiaan Bezuidenhout", "Stephan Jaeger", "Sudarshan Yellamaraju", "Austin Smotherman", "Garrick Higgo", "Denny McCarthy", "David Lipsky", "Emiliano Grillo", "Chris Kirk", "Lucas Glover", "Tony Finau", "Tom Hoge", "Brooks Koepka", "Chandler Blanchet", "Adrien Saddier", "Daniel Brown", "Steven Fisk", "Brandt Snedeker", "Mark Hubbard", "Kevin Yu", "Brian Campbell", "William Mouw", "Jackson Suber", "Thorbjørn Olesen", "Cam Davis", "Keita Nakajima", "Mackenzie Hughes"], "Group D": ["Taylor Moore", "Billy Horschel", "Davis Thompson", "Takumi Kanaya", "Lee Hodges", "Zach Bauchou", "Beau Hossler", "Jesper Svensson", "Vince Whaley", "Adrien Dumont de Chassart", "Davis Riley", "Adam Schenk", "Chad Ramey", "Chandler Phillips", "Joe Highsmith", "Austin Eckroat", "Doug Ghim", "Matt Kuchar", "Erik van Rooyen", "A.J. Ewart", "Neal Shipley", "Zecheng Dou", "Séamus Power", "Karl Vilips", "Aaron Wise", "Adam Svensson", "Alejandro Tosti", "Ben James", "Brad Dalke", "Brendon Todd"], "Group E": ["Brice Garnett", "Kevin Roy", "Christo Lamprecht", "Danny Walker", "Davis Chatfield", "Dylan Wu", "Gordon Sargent", "Hank Lebioda", "Jackson Koivun", "Jeffrey Kang", "Joe Hooks", "Joel Dahmen", "John VanDerLaan", "Kensei Hirata", "Kevin Streelman", "Kristoffer Ventura", "Luke Clanton", "Marcelo Rozo", "Matthieu Pavon", "Nick Dunlap", "Patrick Fishburn", "Patrick Wilkes-Krier", "Patton Kizzire", "Peter Malnati", "Pontus Nyholm", "Rafael Campos", "Ryan Ruffels", "Stefano Mazzoli", "Trace Crowe", "Webb Simpson", "William Jennings"]};
+const WGR_RANKS = {"Cameron Young": 3, "Russell Henley": 5, "Wyndham Clark": 8, "Xander Schauffele": 11, "J.J. Spaun": 12, "Chris Gotterup": 13, "Ben Griffin": 18, "Si Woo Kim": 21, "Harris English": 24, "Jacob Bridgeman": 25, "Ryan Gerard": 27, "Hideki Matsuyama": 28, "Akshay Bhatia": 31, "Nicolai Højgaard": 35, "Maverick McNealy": 36, "Patrick Cantlay": 37, "Keegan Bradley": 38, "Rickie Fowler": 42, "Jake Knapp": 44, "Sam Stevens": 46, "Jason Day": 47, "Marco Penge": 48, "Jordan Spieth": 49, "Michael Kim": 51, "Nico Echavarria": 53, "Corey Conners": 55, "Matt McCarty": 56, "Pierceson Coody": 57, "Michael Brennan": 59, "Ryo Hisatsune": 62, "Andrew Novak": 63, "Nick Taylor": 65, "Eric Cole": 66, "Harry Hall": 70, "Max Greyserman": 71, "Aldrich Potgieter": 74, "Johnny Keefer": 75, "Matti Schmid": 77, "Jordan Smith": 78, "Sungjae Im": 79, "Michael Thorbjornsen": 80, "Rasmus Højgaard": 81, "Matt Wallace": 83, "Patrick Rodgers": 84, "John Parry": 85, "Rasmus Neergaard-Petersen": 86, "Andrew Putnam": 88, "Mac Meissner": 90, "Rico Hoey": 92, "Taylor Pendrith": 93, "Max McGreevy": 94, "Haotong Li": 95, "Ricky Castillo": 96, "Christiaan Bezuidenhout": 98, "Stephan Jaeger": 99, "Sudarshan Yellamaraju": 100, "Austin Smotherman": 101, "Garrick Higgo": 102, "Denny McCarthy": 103, "David Lipsky": 106, "Emiliano Grillo": 107, "Chris Kirk": 108, "Lucas Glover": 109, "Tony Finau": 110, "Tom Hoge": 112, "Brooks Koepka": 113, "Chandler Blanchet": 115, "Adrien Saddier": 117, "Daniel Brown": 119, "Steven Fisk": 120, "Brandt Snedeker": 121, "Mark Hubbard": 122, "Kevin Yu": 125, "Brian Campbell": 127, "William Mouw": 129, "Jackson Suber": 130, "Thorbjørn Olesen": 133, "Keita Nakajima": 136, "Mackenzie Hughes": 139, "Taylor Moore": 140, "Billy Horschel": 142, "Davis Thompson": 148, "Takumi Kanaya": 152, "Lee Hodges": 157, "Zach Bauchou": 158, "Beau Hossler": 159, "Jesper Svensson": 160, "Vince Whaley": 162, "Adrien Dumont de Chassart": 163, "Davis Riley": 167, "Adam Schenk": 169, "Chad Ramey": 170, "Chandler Phillips": 172, "Joe Highsmith": 174, "Austin Eckroat": 176, "Doug Ghim": 177, "Matt Kuchar": 179, "Erik van Rooyen": 181, "A.J. Ewart": 184, "Neal Shipley": 190, "Zecheng Dou": 191, "Séamus Power": 195, "Karl Vilips": 196, "Kevin Roy": 134}; // World Golf Ranking, for display only — never used as the stored value
+/* =================================================================================== */
+
+/* ---- password gate: set up FIRST and independently of everything else on the page,
+   so it works even if something below (group rendering, etc.) has a problem. If that
+   happens, you'll see a visible red error banner instead of the page just doing
+   nothing — screenshot that and send it over. ---- */
+function showPageError(where, err) {
+  const box = document.createElement('div');
+  box.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#b3261e;color:#fff;' +
+    'padding:14px;font:13px monospace;z-index:9999;white-space:pre-wrap;max-height:50vh;overflow:auto;';
+  box.textContent = 'Page error in ' + where + ': ' + (err && err.message ? err.message : err);
+  document.body.appendChild(box);
+}
+
+function tryUnlock() {
+  const entered = document.getElementById('gatePassword').value;
+  const err = document.getElementById('gateErr');
+  if (entered === ENTRY_PASSWORD) {
+    try { sessionStorage.setItem('golfPoolUnlocked', 'yes'); } catch (e) { /* ignore */ }
+    document.getElementById('gateOverlay').style.display = 'none';
+    document.getElementById('mainContent').style.display = 'block';
+  } else {
+    err.textContent = 'Incorrect password. Check with whoever sent you this link.';
+  }
+}
+document.getElementById('gateBtn').addEventListener('click', tryUnlock);
+document.getElementById('gatePassword').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    tryUnlock();
+  }
+});
+try {
+  if (sessionStorage.getItem('golfPoolUnlocked') === 'yes') {
+    document.getElementById('gateOverlay').style.display = 'none';
+    document.getElementById('mainContent').style.display = 'block';
+  }
+} catch (e) { /* ignore — same in-app-browser restriction as above */ }
+
+/* ---- everything else (building the pick form) runs after the gate is already wired
+   up, and is wrapped so a failure here shows a visible error instead of silently
+   breaking the rest of the page. ---- */
+try {
+
+const container = document.getElementById('groupsContainer');
+const groupNames = Object.keys(GROUPS);
+
+function displayName(n) {
+  const rank = WGR_RANKS[n];
+  return rank ? `${n} (WGR ${rank})` : n;
+}
+
+groupNames.forEach((gname, gi) => {
+  const players = GROUPS[gname]; // kept in World Golf Ranking order, best to worst
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.dataset.group = gname;
+
+  const nPicks = GROUP_PICKS[gname];
+  let html = `<h2>${gname}</h2><div class="groupmeta">Pick ${nPicks} players + 1 alternate. ${players.length} players available in this group.</div>`;
+
+  for (let p = 1; p <= nPicks; p++) {
+    html += `
+      <div class="pickrow">
+        <div class="picknum">${p}.</div>
+        <select class="pick-select" data-group="${gname}" data-slot="pick${p}">
+          <option value="">— Select Pick ${p} —</option>
+          ${players.map(n => `<option value="${n}">${displayName(n)}</option>`).join('')}
+        </select>
+      </div>`;
+  }
+
+  html += `
+    <div class="altrow">
+      <label for="alt_${gi}">Alternate (backup if one of your picks WDs)</label>
+      <select class="pick-select" data-group="${gname}" data-slot="alt">
+        <option value="">— Select Alternate —</option>
+        ${players.map(n => `<option value="${n}">${displayName(n)}</option>`).join('')}
+      </select>
+    </div>
+    <div class="err" data-group-err="${gname}"></div>
+  `;
+
+  card.innerHTML = html;
+  container.appendChild(card);
+});
+
+document.getElementById('eventLabel').textContent = TOURNAMENT_NAME;
+
+function collectPicks() {
+  const data = {};
+  let allSelections = [];
+  groupNames.forEach(g => {
+    data[g] = {};
+    document.querySelectorAll(`select[data-group="${CSS.escape(g)}"]`).forEach(sel => {
+      data[g][sel.dataset.slot] = sel.value;
+      if (sel.value) allSelections.push(sel.value);
+    });
+  });
+  return { data, allSelections };
+}
+
+function validate() {
+  const name = document.getElementById('entrantName').value.trim();
+  const nameErr = document.getElementById('nameErr');
+  let ok = true;
+  let problems = [];
+
+  if (!name) {
+    nameErr.style.display = 'block';
+    ok = false;
+    problems.push('enter your name');
+  } else {
+    nameErr.style.display = 'none';
+  }
+
+  const { data, allSelections } = collectPicks();
+  let missing = [];
+  groupNames.forEach(g => {
+    const errEl = document.querySelector(`[data-group-err="${CSS.escape(g)}"]`);
+    let groupMissing = [];
+    for (let p = 1; p <= GROUP_PICKS[g]; p++) {
+      if (!data[g][`pick${p}`]) groupMissing.push(`Pick ${p}`);
+    }
+    if (!data[g].alt) groupMissing.push('Alternate');
+    if (groupMissing.length) {
+      errEl.textContent = `Missing: ${groupMissing.join(', ')}`;
+      errEl.style.display = 'block';
+      missing.push(g);
+      ok = false;
+    } else {
+      errEl.style.display = 'none';
+    }
+  });
+  if (missing.length) problems.push(`complete your selections for ${missing.join(', ')}`);
+
+  const dupes = allSelections.filter((v, i) => allSelections.indexOf(v) !== i);
+  const uniqueDupes = [...new Set(dupes)];
+  if (uniqueDupes.length) {
+    ok = false;
+    problems.push(`remove duplicate golfer(s): ${uniqueDupes.join(', ')} (each golfer can only be picked once)`);
+  }
+
+  // This message is the single source of truth for "something's wrong" — it always
+  // reflects every problem found above (missing name, missing picks, duplicates),
+  // so it can't go silently blank the way a field-specific check alone might.
+  const valErr = document.getElementById('validationErr');
+  if (!ok) {
+    valErr.textContent = 'Please ' + problems.join('; and ') + '.';
+    valErr.style.display = 'block';
+  } else {
+    valErr.style.display = 'none';
+  }
+
+  return ok;
+}
+
+function buildSummary() {
+  const name = document.getElementById('entrantName').value.trim();
+  const { data } = collectPicks();
+  let lines = [`${TOURNAMENT_NAME} — Picks for ${name}`, ''];
+  const csvFields = [name];
+  groupNames.forEach(g => {
+    lines.push(`${g}:`);
+    for (let p = 1; p <= GROUP_PICKS[g]; p++) {
+      lines.push(`  Pick ${p}: ${data[g][`pick${p}`]}`);
+      csvFields.push(data[g][`pick${p}`]);
+    }
+    lines.push(`  Alternate: ${data[g].alt}`);
+    csvFields.push(data[g].alt);
+    lines.push('');
+  });
+  // Tab-delimited: for the "Copy Data Row" button. A direct clipboard copy/paste
+  // into Excel splits real tab characters into columns automatically — no extra
+  // steps needed, and this is unaffected by email formatting since it never
+  // goes through an email client.
+  const csv = csvFields.join('\t');
+  // Comma-delimited: for the emailed/texted version. Email clients routinely
+  // collapse or strip tab characters in plain-text bodies, which silently
+  // shifts every column after a multi-word name (e.g. "J.J. Spaun"). Commas
+  // survive that round-trip reliably, and golfer names never contain commas.
+  const emailCsv = csvFields.join(',');
+  return { text: lines.join('\n'), csv, emailCsv };
+}
+
+document.getElementById('submitBtn').addEventListener('click', () => {
+  if (!validate()) {
+    // validationErr sits in the sticky footer so it's normally already visible,
+    // but scroll/flash it too in case the page hasn't been scrolled that far yet
+    // (e.g. right after landing on the page with a short viewport).
+    const errBox = document.getElementById('validationErr');
+    errBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
+  const { text, csv } = buildSummary();
+  document.getElementById('summaryText').value = text;
+  document.getElementById('csvText').value = csv;
+  document.getElementById('summary').style.display = 'block';
+  document.getElementById('sendBtns').style.display = 'flex';
+  document.getElementById('summary').scrollIntoView({ behavior: 'smooth' });
+});
+
+document.getElementById('emailBtn').addEventListener('click', () => {
+  const name = document.getElementById('entrantName').value.trim();
+  const { text, emailCsv } = buildSummary();
+  const subject = encodeURIComponent(`${TOURNAMENT_NAME} Picks — ${name}`);
+  const body = encodeURIComponent(
+    text +
+    '\n\n---\nData row (comma-separated — paste into column A of a new Picks-tab row, ' +
+    'then in Excel: Data > Text to Columns > Delimited > Comma > Finish):\n' +
+    emailCsv
+  );
+  window.location.href = `mailto:${SEND_TO_EMAIL}?subject=${subject}&body=${body}`;
+});
+
+document.getElementById('copyBtn').addEventListener('click', () => {
+  const csvEl = document.getElementById('csvText');
+  csvEl.select();
+  document.execCommand('copy');
+  const btn = document.getElementById('copyBtn');
+  const orig = btn.textContent;
+  btn.textContent = '✅ Copied!';
+  setTimeout(() => btn.textContent = orig, 1500);
+});
+
+} catch (pageErr) {
+  showPageError('building the pick form', pageErr);
+}
+</script>
+
+</body>
+</html>
