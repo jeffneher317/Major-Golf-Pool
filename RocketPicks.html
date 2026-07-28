@@ -44,7 +44,17 @@
   }
   #submitBtn{background:var(--green); color:#fff;}
   #submitBtn:hover{background:var(--green-dark);}
-  .secondary{background:#fff; border:1px solid var(--border) !important; color:var(--text);}
+  #submitBtn.reviewed{
+    background:#fff; border:1px solid var(--border); color:#556; box-shadow:none;
+    font-size:.8rem; font-weight:600; padding:8px 10px;
+  }
+  #submitOnlineBtn{background:var(--green); color:#fff; font-size:1.1rem;}
+  #submitOnlineBtn:hover{background:var(--green-dark);}
+  #submitOnlineBtn:disabled{opacity:.7; cursor:default;}
+  .secondary{
+    background:#fff; border:1px solid var(--border) !important; color:#556;
+    font-size:.8rem; font-weight:600; padding:8px 10px;
+  }
   #summary{display:none;}
   #summary textarea{
     width:100%; height:150px; font-family:ui-monospace,Menlo,Consolas,monospace;
@@ -91,6 +101,10 @@
 
 <div class="wrap">
 
+  <div style="text-align:center; margin-bottom:16px;">
+    <a href="RocketGroups.html" style="color:#155724; font-weight:600; font-size:.95rem; text-decoration:none;">📋 View full group rosters &rarr;</a>
+  </div>
+
   <div class="card">
     <h2>Your Info</h2>
     <label for="entrantName">Your Name (exactly as you want it on the leaderboard)</label>
@@ -113,9 +127,13 @@
   <div class="actions">
     <div id="validationErr" class="err" style="text-align:center;"></div>
     <button id="submitBtn" type="button">Review My Picks</button>
-    <div class="flex-btns" id="sendBtns" style="display:none;">
-      <button class="secondary" id="emailBtn" type="button">📧 Email My Picks</button>
-      <button class="secondary" id="copyBtn" type="button">📋 Copy Data Row</button>
+    <div class="flex-btns" id="sendBtns" style="display:none; flex-direction:column;">
+      <button id="submitOnlineBtn" type="button">✅ Submit My Picks</button>
+      <div class="flex-btns">
+        <button class="secondary" id="emailBtn" type="button">📧 Email My Picks</button>
+        <button class="secondary" id="copyBtn" type="button">📋 Copy Data Row</button>
+      </div>
+      <p class="note" style="text-align:center; margin-top:2px;">"Submit My Picks" sends your picks automatically — no email needed. Use Email or Copy as a backup if it fails.</p>
     </div>
   </div>
 
@@ -128,6 +146,9 @@ const TOURNAMENT_NAME = "Rocket Classic (TEST) \u2014 Detroit Golf Club";
 const SEND_TO_EMAIL = "jeff.neher@gmail.com"; // change to whoever collects picks (e.g. Chip Brunt)
 const ENTRY_PASSWORD = "Detroit2026"; // change this each tournament and share it with entrants only
 const GROUP_PICKS = {"Group A": 5, "Group B": 4, "Group C": 3, "Group D": 2, "Group E": 1}; // picks per group (15 total)
+const SUBMIT_URL = "https://script.google.com/macros/s/AKfycbxJp18dq8iLJzVAd-27eSvmZPJeGX-ERJxiHK3-aF0-v84_02ZheefVgIzAW4gxNCJOHw/exec"; // same Web App URL all year, shared by every tournament's form
+const SUBMIT_SECRET = "Majors2026"; // must exactly match SHARED_SECRET in the Apps Script — same all year
+const TOURNAMENT_ID = "Rocket Classic (TEST)"; // becomes this tournament's tab name in the year's Google Sheet
 const GROUPS = {"Group A": ["Cameron Young", "Russell Henley", "Wyndham Clark", "Xander Schauffele", "J.J. Spaun", "Chris Gotterup", "Ben Griffin", "Si Woo Kim", "Harris English", "Jacob Bridgeman", "Ryan Gerard", "Hideki Matsuyama", "Akshay Bhatia", "Nicolai Højgaard", "Maverick McNealy", "Patrick Cantlay", "Keegan Bradley", "Rickie Fowler", "Jake Knapp", "Sam Stevens", "Jason Day", "Marco Penge", "Jordan Spieth", "Michael Kim", "Nico Echavarria"], "Group B": ["Corey Conners", "Matt McCarty", "Pierceson Coody", "Michael Brennan", "Ryo Hisatsune", "Andrew Novak", "Nick Taylor", "Eric Cole", "Harry Hall", "Max Greyserman", "Aldrich Potgieter", "Johnny Keefer", "Matti Schmid", "Jordan Smith", "Sungjae Im", "Michael Thorbjornsen", "Rasmus Højgaard", "Matt Wallace", "Patrick Rodgers", "John Parry", "Rasmus Neergaard-Petersen", "Andrew Putnam", "Mac Meissner", "Rico Hoey", "Taylor Pendrith"], "Group C": ["Max McGreevy", "Haotong Li", "Ricky Castillo", "Christiaan Bezuidenhout", "Stephan Jaeger", "Sudarshan Yellamaraju", "Austin Smotherman", "Garrick Higgo", "Denny McCarthy", "David Lipsky", "Emiliano Grillo", "Chris Kirk", "Lucas Glover", "Tony Finau", "Tom Hoge", "Brooks Koepka", "Chandler Blanchet", "Adrien Saddier", "Daniel Brown", "Steven Fisk", "Brandt Snedeker", "Mark Hubbard", "Kevin Yu", "Brian Campbell", "William Mouw", "Jackson Suber", "Thorbjørn Olesen", "Cam Davis", "Keita Nakajima", "Mackenzie Hughes"], "Group D": ["Taylor Moore", "Billy Horschel", "Davis Thompson", "Takumi Kanaya", "Lee Hodges", "Zach Bauchou", "Beau Hossler", "Jesper Svensson", "Vince Whaley", "Adrien Dumont de Chassart", "Davis Riley", "Adam Schenk", "Chad Ramey", "Chandler Phillips", "Joe Highsmith", "Austin Eckroat", "Doug Ghim", "Matt Kuchar", "Erik van Rooyen", "A.J. Ewart", "Neal Shipley", "Zecheng Dou", "Séamus Power", "Karl Vilips", "Aaron Wise", "Adam Svensson", "Alejandro Tosti", "Ben James", "Brad Dalke", "Brendon Todd"], "Group E": ["Brice Garnett", "Kevin Roy", "Christo Lamprecht", "Danny Walker", "Davis Chatfield", "Dylan Wu", "Gordon Sargent", "Hank Lebioda", "Jackson Koivun", "Jeffrey Kang", "Joe Hooks", "Joel Dahmen", "John VanDerLaan", "Kensei Hirata", "Kevin Streelman", "Kristoffer Ventura", "Luke Clanton", "Marcelo Rozo", "Matthieu Pavon", "Nick Dunlap", "Patrick Fishburn", "Patrick Wilkes-Krier", "Patton Kizzire", "Peter Malnati", "Pontus Nyholm", "Rafael Campos", "Ryan Ruffels", "Stefano Mazzoli", "Trace Crowe", "Webb Simpson", "William Jennings"]};
 const WGR_RANKS = {"Cameron Young": 3, "Russell Henley": 5, "Wyndham Clark": 8, "Xander Schauffele": 11, "J.J. Spaun": 12, "Chris Gotterup": 13, "Ben Griffin": 18, "Si Woo Kim": 21, "Harris English": 24, "Jacob Bridgeman": 25, "Ryan Gerard": 27, "Hideki Matsuyama": 28, "Akshay Bhatia": 31, "Nicolai Højgaard": 35, "Maverick McNealy": 36, "Patrick Cantlay": 37, "Keegan Bradley": 38, "Rickie Fowler": 42, "Jake Knapp": 44, "Sam Stevens": 46, "Jason Day": 47, "Marco Penge": 48, "Jordan Spieth": 49, "Michael Kim": 51, "Nico Echavarria": 53, "Corey Conners": 55, "Matt McCarty": 56, "Pierceson Coody": 57, "Michael Brennan": 59, "Ryo Hisatsune": 62, "Andrew Novak": 63, "Nick Taylor": 65, "Eric Cole": 66, "Harry Hall": 70, "Max Greyserman": 71, "Aldrich Potgieter": 74, "Johnny Keefer": 75, "Matti Schmid": 77, "Jordan Smith": 78, "Sungjae Im": 79, "Michael Thorbjornsen": 80, "Rasmus Højgaard": 81, "Matt Wallace": 83, "Patrick Rodgers": 84, "John Parry": 85, "Rasmus Neergaard-Petersen": 86, "Andrew Putnam": 88, "Mac Meissner": 90, "Rico Hoey": 92, "Taylor Pendrith": 93, "Max McGreevy": 94, "Haotong Li": 95, "Ricky Castillo": 96, "Christiaan Bezuidenhout": 98, "Stephan Jaeger": 99, "Sudarshan Yellamaraju": 100, "Austin Smotherman": 101, "Garrick Higgo": 102, "Denny McCarthy": 103, "David Lipsky": 106, "Emiliano Grillo": 107, "Chris Kirk": 108, "Lucas Glover": 109, "Tony Finau": 110, "Tom Hoge": 112, "Brooks Koepka": 113, "Chandler Blanchet": 115, "Adrien Saddier": 117, "Daniel Brown": 119, "Steven Fisk": 120, "Brandt Snedeker": 121, "Mark Hubbard": 122, "Kevin Yu": 125, "Brian Campbell": 127, "William Mouw": 129, "Jackson Suber": 130, "Thorbjørn Olesen": 133, "Keita Nakajima": 136, "Mackenzie Hughes": 139, "Taylor Moore": 140, "Billy Horschel": 142, "Davis Thompson": 148, "Takumi Kanaya": 152, "Lee Hodges": 157, "Zach Bauchou": 158, "Beau Hossler": 159, "Jesper Svensson": 160, "Vince Whaley": 162, "Adrien Dumont de Chassart": 163, "Davis Riley": 167, "Adam Schenk": 169, "Chad Ramey": 170, "Chandler Phillips": 172, "Joe Highsmith": 174, "Austin Eckroat": 176, "Doug Ghim": 177, "Matt Kuchar": 179, "Erik van Rooyen": 181, "A.J. Ewart": 184, "Neal Shipley": 190, "Zecheng Dou": 191, "Séamus Power": 195, "Karl Vilips": 196, "Kevin Roy": 134}; // World Golf Ranking, for display only — never used as the stored value
 /* =================================================================================== */
@@ -218,6 +239,34 @@ groupNames.forEach((gname, gi) => {
 });
 
 document.getElementById('eventLabel').textContent = TOURNAMENT_NAME;
+
+/* ---- hidden test helper — nobody sees this unless they know to add
+   ?autofill=jeff to the URL. Fills every group with random valid picks
+   (no name changes to the page, no clue it exists otherwise) so you can
+   smoke-test submission without hand-picking 15 players every time. ---- */
+if (new URLSearchParams(window.location.search).get('autofill') === 'jeff') {
+  const fillBtn = document.createElement('button');
+  fillBtn.type = 'button';
+  fillBtn.textContent = '🎲 Fill Random Picks (test only)';
+  fillBtn.style.cssText = 'background:#fdf3d0;border:1px solid var(--gold);color:#7a6420;' +
+    'font-size:.8rem; font-weight:600; padding:8px 10px;';
+  fillBtn.addEventListener('click', () => {
+    if (!document.getElementById('entrantName').value.trim()) {
+      document.getElementById('entrantName').value = 'Test Entrant ' + Math.floor(Math.random() * 10000);
+    }
+    groupNames.forEach(g => {
+      const shuffled = GROUPS[g].slice();
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      document.querySelectorAll(`select[data-group="${CSS.escape(g)}"]`).forEach((sel, idx) => {
+        sel.value = shuffled[idx];
+      });
+    });
+  });
+  document.querySelector('.wrap').insertBefore(fillBtn, document.getElementById('groupsContainer'));
+}
 
 function collectPicks() {
   const data = {};
@@ -329,7 +378,47 @@ document.getElementById('submitBtn').addEventListener('click', () => {
   document.getElementById('csvText').value = csv;
   document.getElementById('summary').style.display = 'block';
   document.getElementById('sendBtns').style.display = 'flex';
+  // Once picks have been reviewed, this button has done its job — shrink it out
+  // of the way so "Submit My Picks" is the one thing that stands out. Clicking
+  // it again still re-validates/refreshes the summary if picks changed.
+  const reviewBtn = document.getElementById('submitBtn');
+  reviewBtn.classList.add('reviewed');
+  reviewBtn.textContent = '🔄 Re-check my picks';
   document.getElementById('summary').scrollIntoView({ behavior: 'smooth' });
+});
+
+document.getElementById('submitOnlineBtn').addEventListener('click', () => {
+  const btn = document.getElementById('submitOnlineBtn');
+  const name = document.getElementById('entrantName').value.trim();
+  const { data } = collectPicks();
+
+  const payload = { secret: SUBMIT_SECRET, tournament: TOURNAMENT_ID, entrantName: name };
+  groupNames.forEach(g => {
+    const key = g.replace(/\s+/g, '');
+    for (let p = 1; p <= GROUP_PICKS[g]; p++) {
+      payload[`${key}_pick${p}`] = data[g][`pick${p}`] || '';
+    }
+    payload[`${key}_alt`] = data[g].alt || '';
+  });
+
+  btn.disabled = true;
+  btn.textContent = 'Submitting…';
+
+  // Apps Script Web Apps don't send CORS headers, so the browser gets an
+  // "opaque" response with fetch — we can't read whether it actually succeeded
+  // server-side. mode:'no-cors' still delivers the request; text/plain avoids
+  // triggering a CORS preflight that Apps Script can't answer.
+  fetch(SUBMIT_URL, {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(payload)
+  }).then(() => {
+    btn.textContent = '✅ Submitted — check the sheet to confirm';
+  }).catch(() => {
+    btn.disabled = false;
+    btn.textContent = '🔁 Try Again';
+  });
 });
 
 document.getElementById('emailBtn').addEventListener('click', () => {

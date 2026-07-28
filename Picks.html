@@ -44,7 +44,17 @@
   }
   #submitBtn{background:var(--green); color:#fff;}
   #submitBtn:hover{background:var(--green-dark);}
-  .secondary{background:#fff; border:1px solid var(--border) !important; color:var(--text);}
+  #submitBtn.reviewed{
+    background:#fff; border:1px solid var(--border); color:#556; box-shadow:none;
+    font-size:.8rem; font-weight:600; padding:8px 10px;
+  }
+  #submitOnlineBtn{background:var(--green); color:#fff; font-size:1.1rem;}
+  #submitOnlineBtn:hover{background:var(--green-dark);}
+  #submitOnlineBtn:disabled{opacity:.7; cursor:default;}
+  .secondary{
+    background:#fff; border:1px solid var(--border) !important; color:#556;
+    font-size:.8rem; font-weight:600; padding:8px 10px;
+  }
   #summary{display:none;}
   #summary textarea{
     width:100%; height:150px; font-family:ui-monospace,Menlo,Consolas,monospace;
@@ -91,6 +101,10 @@
 
 <div class="wrap">
 
+  <div style="text-align:center; margin-bottom:16px;">
+    <a href="Groups.html" style="color:#155724; font-weight:600; font-size:.95rem; text-decoration:none;">📋 View full group rosters &rarr;</a>
+  </div>
+
   <div class="card">
     <h2>Your Info</h2>
     <label for="entrantName">Your Name (exactly as you want it on the leaderboard)</label>
@@ -113,9 +127,13 @@
   <div class="actions">
     <div id="validationErr" class="err" style="text-align:center;"></div>
     <button id="submitBtn" type="button">Review My Picks</button>
-    <div class="flex-btns" id="sendBtns" style="display:none;">
-      <button class="secondary" id="emailBtn" type="button">📧 Email My Picks</button>
-      <button class="secondary" id="copyBtn" type="button">📋 Copy Data Row</button>
+    <div class="flex-btns" id="sendBtns" style="display:none; flex-direction:column;">
+      <button id="submitOnlineBtn" type="button">✅ Submit My Picks</button>
+      <div class="flex-btns">
+        <button class="secondary" id="emailBtn" type="button">📧 Email My Picks</button>
+        <button class="secondary" id="copyBtn" type="button">📋 Copy Data Row</button>
+      </div>
+      <p class="note" style="text-align:center; margin-top:2px;">"Submit My Picks" sends your picks automatically — no email needed. Use Email or Copy as a backup if it fails.</p>
     </div>
   </div>
 
@@ -128,6 +146,9 @@ const TOURNAMENT_NAME = "2026 The Open Championship";
 const SEND_TO_EMAIL = "jeff.neher@gmail.com"; // change to whoever collects picks (e.g. Chip Brunt)
 const ENTRY_PASSWORD = "Birkdale2026"; // change this each tournament and share it with entrants only
 const GROUP_PICKS = {"Group A": 5, "Group B": 4, "Group C": 3, "Group D": 2, "Group E": 1}; // picks per group (15 total): 5-4-3-2-1 across Groups A-E
+const SUBMIT_URL = "https://script.google.com/macros/s/AKfycbxJp18dq8iLJzVAd-27eSvmZPJeGX-ERJxiHK3-aF0-v84_02ZheefVgIzAW4gxNCJOHw/exec"; // same Web App URL all year, shared by every tournament's form
+const SUBMIT_SECRET = "Majors2026"; // must exactly match SHARED_SECRET in the Apps Script — same all year
+const TOURNAMENT_ID = "The Open Championship"; // becomes this tournament's tab name in the year's Google Sheet
 const GROUPS = {"Group A": ["Rory McIlroy", "Matt Fitzpatrick", "Scottie Scheffler", "Tommy Fleetwood", "Xander Schauffele", "Justin Rose", "Robert MacIntyre", "Chris Gotterup", "Sam Burns", "Cameron Young", "Jon Rahm", "Wyndham Clark", "Collin Morikawa", "Ludvig Åberg", "Viktor Hovland", "Russell Henley", "Tyrrell Hatton", "Aaron Rai", "Ben Griffin", "Bryson DeChambeau"], "Group B": ["Tom Kim", "Patrick Reed", "Shane Lowry", "Akshay Bhatia", "Kristoffer Reitan", "Hideki Matsuyama", "Maverick McNealy", "Nicolai Højgaard", "Harris English", "Patrick Cantlay", "Joaquín Niemann", "Alex Noren", "Jacob Bridgeman", "Gary Woodland", "Rickie Fowler", "Marco Penge", "J.T. Poston", "Alex Smalley", "Ryan Gerard", "Kurt Kitayama", "Bud Cauley", "Daniel Berger", "Keegan Bradley", "Jake Knapp"], "Group C": ["Jordan Spieth", "Corey Conners", "Brian Harman", "Alex Fitzpatrick", "Adam Scott", "Brooks Koepka", "Jason Day", "Ryan Fox", "Nico Echavarria", "Cameron Smith", "Eugenio Chacarra", "Max Homa", "Ryo Hisatsune", "Michael Thorbjornsen", "Nick Taylor", "Jordan Smith", "Eric Cole", "David Puig", "Johnny Keefer", "Matt Wallace", "Pierceson Coody", "Michael Kim", "Michael Brennan", "Andrew Novak", "Harry Hall"], "Group D": ["Sahith Theegala", "Rasmus Højgaard", "Sungjae Im", "Victor Perez", "Tom McKibbin", "Haotong Li", "Rasmus Neergaard-Petersen", "Daniel Brown", "Jackson Suber", "John Parry", "Caleb Surratt", "Casey Jarvis", "Bernd Wiesberger", "Laurie Canter", "Shaun Norris", "Hennie Du Plessis", "Andy Sullivan", "Joakim Lagergren"], "Group E": ["Billy Horschel", "Padraig Harrington", "Jesper Svensson", "Matthew Jordan", "Stewart Cink", "Henrik Stenson", "Peter Uihlein", "Aldrich Potgieter", "Kazuki Higa", "Naoyuki Kataoka", "Antoine Rozner", "Joe Dean", "Alistair Docherty", "Martin Couvra", "Darren Clarke", "Nevill Ruiter (a)", "Stuart Grehan (a)"]};
 /* =================================================================================== */
 
@@ -212,6 +233,34 @@ groupNames.forEach((gname, gi) => {
 });
 
 document.getElementById('eventLabel').textContent = TOURNAMENT_NAME;
+
+/* ---- hidden test helper — nobody sees this unless they know to add
+   ?autofill=jeff to the URL. Fills every group with random valid picks
+   (no name changes to the page, no clue it exists otherwise) so you can
+   smoke-test submission without hand-picking 15 players every time. ---- */
+if (new URLSearchParams(window.location.search).get('autofill') === 'jeff') {
+  const fillBtn = document.createElement('button');
+  fillBtn.type = 'button';
+  fillBtn.textContent = '🎲 Fill Random Picks (test only)';
+  fillBtn.style.cssText = 'background:#fdf3d0;border:1px solid var(--gold);color:#7a6420;' +
+    'font-size:.8rem; font-weight:600; padding:8px 10px;';
+  fillBtn.addEventListener('click', () => {
+    if (!document.getElementById('entrantName').value.trim()) {
+      document.getElementById('entrantName').value = 'Test Entrant ' + Math.floor(Math.random() * 10000);
+    }
+    groupNames.forEach(g => {
+      const shuffled = GROUPS[g].slice();
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      document.querySelectorAll(`select[data-group="${CSS.escape(g)}"]`).forEach((sel, idx) => {
+        sel.value = shuffled[idx];
+      });
+    });
+  });
+  document.querySelector('.wrap').insertBefore(fillBtn, document.getElementById('groupsContainer'));
+}
 
 function collectPicks() {
   const data = {};
@@ -323,7 +372,47 @@ document.getElementById('submitBtn').addEventListener('click', () => {
   document.getElementById('csvText').value = csv;
   document.getElementById('summary').style.display = 'block';
   document.getElementById('sendBtns').style.display = 'flex';
+  // Once picks have been reviewed, this button has done its job — shrink it out
+  // of the way so "Submit My Picks" is the one thing that stands out. Clicking
+  // it again still re-validates/refreshes the summary if picks changed.
+  const reviewBtn = document.getElementById('submitBtn');
+  reviewBtn.classList.add('reviewed');
+  reviewBtn.textContent = '🔄 Re-check my picks';
   document.getElementById('summary').scrollIntoView({ behavior: 'smooth' });
+});
+
+document.getElementById('submitOnlineBtn').addEventListener('click', () => {
+  const btn = document.getElementById('submitOnlineBtn');
+  const name = document.getElementById('entrantName').value.trim();
+  const { data } = collectPicks();
+
+  const payload = { secret: SUBMIT_SECRET, tournament: TOURNAMENT_ID, entrantName: name };
+  groupNames.forEach(g => {
+    const key = g.replace(/\s+/g, '');
+    for (let p = 1; p <= GROUP_PICKS[g]; p++) {
+      payload[`${key}_pick${p}`] = data[g][`pick${p}`] || '';
+    }
+    payload[`${key}_alt`] = data[g].alt || '';
+  });
+
+  btn.disabled = true;
+  btn.textContent = 'Submitting…';
+
+  // Apps Script Web Apps don't send CORS headers, so the browser gets an
+  // "opaque" response with fetch — we can't read whether it actually succeeded
+  // server-side. mode:'no-cors' still delivers the request; text/plain avoids
+  // triggering a CORS preflight that Apps Script can't answer.
+  fetch(SUBMIT_URL, {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(payload)
+  }).then(() => {
+    btn.textContent = '✅ Submitted — check the sheet to confirm';
+  }).catch(() => {
+    btn.disabled = false;
+    btn.textContent = '🔁 Try Again';
+  });
 });
 
 document.getElementById('emailBtn').addEventListener('click', () => {
