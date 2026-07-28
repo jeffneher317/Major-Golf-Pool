@@ -99,6 +99,7 @@
 <header>
   <h1>2026 PGA Majors Golf Challenge</h1>
   <p id="eventLabel">The Open Championship — Royal Birkdale Golf Club</p>
+  <p id="courseInfo" style="font-size:.85rem; opacity:.85; margin-top:4px;"></p>
 </header>
 
 <div class="wrap">
@@ -174,6 +175,7 @@ const GROUP_PICKS = {"Group A": 5, "Group B": 4, "Group C": 3, "Group D": 2, "Gr
 const SUBMIT_URL = "https://script.google.com/macros/s/AKfycbxJp18dq8iLJzVAd-27eSvmZPJeGX-ERJxiHK3-aF0-v84_02ZheefVgIzAW4gxNCJOHw/exec"; // same Web App URL all year, shared by every tournament's form
 const SUBMIT_SECRET = "Majors2026"; // must exactly match SHARED_SECRET in the Apps Script — same all year
 const TOURNAMENT_ID = "The Open Championship"; // becomes this tournament's tab name in the year's Google Sheet
+const COURSE_INFO = "156 golfers in the field · Par 70 · 7,223 yards"; // field size + par, shown under the header — update each tournament (source: PGA Tour / tournament site)
 const GROUPS = {"Group A": ["Rory McIlroy", "Matt Fitzpatrick", "Scottie Scheffler", "Tommy Fleetwood", "Xander Schauffele", "Justin Rose", "Robert MacIntyre", "Chris Gotterup", "Sam Burns", "Cameron Young", "Jon Rahm", "Wyndham Clark", "Collin Morikawa", "Ludvig Åberg", "Viktor Hovland", "Russell Henley", "Tyrrell Hatton", "Aaron Rai", "Ben Griffin", "Bryson DeChambeau"], "Group B": ["Tom Kim", "Patrick Reed", "Shane Lowry", "Akshay Bhatia", "Kristoffer Reitan", "Hideki Matsuyama", "Maverick McNealy", "Nicolai Højgaard", "Harris English", "Patrick Cantlay", "Joaquín Niemann", "Alex Noren", "Jacob Bridgeman", "Gary Woodland", "Rickie Fowler", "Marco Penge", "J.T. Poston", "Alex Smalley", "Ryan Gerard", "Kurt Kitayama", "Bud Cauley", "Daniel Berger", "Keegan Bradley", "Jake Knapp"], "Group C": ["Jordan Spieth", "Corey Conners", "Brian Harman", "Alex Fitzpatrick", "Adam Scott", "Brooks Koepka", "Jason Day", "Ryan Fox", "Nico Echavarria", "Cameron Smith", "Eugenio Chacarra", "Max Homa", "Ryo Hisatsune", "Michael Thorbjornsen", "Nick Taylor", "Jordan Smith", "Eric Cole", "David Puig", "Johnny Keefer", "Matt Wallace", "Pierceson Coody", "Michael Kim", "Michael Brennan", "Andrew Novak", "Harry Hall"], "Group D": ["Sahith Theegala", "Rasmus Højgaard", "Sungjae Im", "Victor Perez", "Tom McKibbin", "Haotong Li", "Rasmus Neergaard-Petersen", "Daniel Brown", "Jackson Suber", "John Parry", "Caleb Surratt", "Casey Jarvis", "Bernd Wiesberger", "Laurie Canter", "Shaun Norris", "Hennie Du Plessis", "Andy Sullivan", "Joakim Lagergren"], "Group E": ["Billy Horschel", "Padraig Harrington", "Jesper Svensson", "Matthew Jordan", "Stewart Cink", "Henrik Stenson", "Peter Uihlein", "Aldrich Potgieter", "Kazuki Higa", "Naoyuki Kataoka", "Antoine Rozner", "Joe Dean", "Alistair Docherty", "Martin Couvra", "Darren Clarke", "Nevill Ruiter (a)", "Stuart Grehan (a)"]};
 /* =================================================================================== */
 
@@ -258,6 +260,7 @@ groupNames.forEach((gname, gi) => {
 });
 
 document.getElementById('eventLabel').textContent = TOURNAMENT_NAME;
+document.getElementById('courseInfo').textContent = COURSE_INFO;
 
 /* ---- hidden test helper — nobody sees this unless they know to add
    ?autofill=jeff to the URL. Fills every group with random valid picks
