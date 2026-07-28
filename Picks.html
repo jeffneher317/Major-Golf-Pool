@@ -80,6 +80,8 @@
   .gateErr{color:var(--red); font-size:.85rem; min-height:18px; margin-bottom:6px;}
   #mainContent{display:none;}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
 
@@ -124,7 +126,7 @@
     <div class="status ok" id="okMsg">Looks good! Choose how to send your picks below.</div>
     <label>Plain-text summary (for email/text)</label>
     <textarea id="summaryText" readonly></textarea>
-    <label style="margin-top:14px;">Data row (paste directly into the Picks tab)</label>
+    <label style="margin-top:14px;">Data row (paste directly into the Picks tab) <span style="font-weight:400; font-style:italic; color:#889;">— pay no attention to the man behind the curtain; this one's only for the all-powerful Oz</span></label>
     <textarea id="csvText" readonly style="height:60px;"></textarea>
   </div>
 
@@ -138,11 +140,30 @@
         <button class="secondary" id="copyBtn" type="button">📋 Copy Data Row</button>
       </div>
       <p class="note" style="text-align:center; margin-top:2px;">"Submit My Picks" sends your picks automatically — no email needed. Use Email or Copy as a backup if it fails.</p>
+      <div id="saveRecordSection" style="display:none; margin-top:14px; padding-top:14px; border-top:1px dashed var(--border);">
+        <p class="note" style="text-align:center; margin-bottom:8px;">Want a copy for yourself? Save a record of your picks below.</p>
+        <div class="flex-btns">
+          <button class="secondary" id="saveJpegBtn" type="button">📸 Save as JPEG</button>
+          <button class="secondary" id="savePdfBtn" type="button">📄 Save as PDF</button>
+        </div>
+      </div>
     </div>
   </div>
 
 </div>
 </div><!-- /mainContent -->
+
+<!-- Off-screen receipt card — not part of the normal page layout, only rendered
+     here so html2canvas has something clean to photograph on demand. -->
+<div id="receiptCard" style="position:absolute; left:-9999px; top:0; width:380px; background:#fff; padding:24px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <div style="text-align:center; border-bottom:3px solid #c9a227; padding-bottom:12px; margin-bottom:16px;">
+    <div style="font-size:.75rem; letter-spacing:1px; color:#889; text-transform:uppercase;">My Picks</div>
+    <div id="receiptTournament" style="font-size:1.1rem; font-weight:700; color:#0d3a19; margin-top:4px;"></div>
+    <div id="receiptName" style="font-size:1rem; font-weight:600; margin-top:6px;"></div>
+    <div id="receiptDate" style="font-size:.75rem; color:#889; margin-top:2px;"></div>
+  </div>
+  <div id="receiptGroups"></div>
+</div>
 
 <script>
 /* ====================== CONFIG — edit this each tournament ====================== */
@@ -432,11 +453,63 @@ document.getElementById('submitOnlineBtn').addEventListener('click', () => {
     body: JSON.stringify(payload)
   }).then(() => {
     btn.textContent = '✅ Submitted — check the sheet to confirm';
+    document.getElementById('saveRecordSection').style.display = 'block';
   }).catch(() => {
     btn.disabled = false;
     btn.textContent = '🔁 Try Again';
   });
 });
+
+/* ---- personal keepsake: builds a clean receipt (not the raw textarea) and
+   captures it as an image, then either downloads that image directly or
+   wraps it into a one-page PDF. Only shown once the online submit succeeds. ---- */
+function buildReceiptCard() {
+  const { full: name } = getNameParts();
+  const { data } = collectPicks();
+  document.getElementById('receiptTournament').textContent = TOURNAMENT_NAME;
+  document.getElementById('receiptName').textContent = name;
+  document.getElementById('receiptDate').textContent = 'Submitted ' + new Date().toLocaleString();
+  const groupsEl = document.getElementById('receiptGroups');
+  let html = '';
+  groupNames.forEach(g => {
+    html += `<div style="margin-bottom:12px;">
+      <div style="font-weight:700; color:#155724; font-size:.85rem; border-bottom:1px solid #e2e6e2; padding-bottom:4px; margin-bottom:6px;">${g}</div>`;
+    for (let p = 1; p <= GROUP_PICKS[g]; p++) {
+      html += `<div style="font-size:.85rem; padding:2px 0;">${p}. ${data[g][`pick${p}`] || '—'}</div>`;
+    }
+    html += `<div style="font-size:.8rem; padding:2px 0; color:#889; font-style:italic;">Alt: ${data[g].alt || '—'}</div></div>`;
+  });
+  groupsEl.innerHTML = html;
+}
+
+function sanitizeFilename(s) {
+  return s.replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '');
+}
+
+function downloadRecord(format) {
+  buildReceiptCard();
+  const el = document.getElementById('receiptCard');
+  const { full: name } = getNameParts();
+  const filenameBase = sanitizeFilename(`${TOURNAMENT_ID}_${name}_Picks`);
+  html2canvas(el, { scale: 2, backgroundColor: '#ffffff' }).then(canvas => {
+    if (format === 'jpeg') {
+      const link = document.createElement('a');
+      link.download = filenameBase + '.jpg';
+      link.href = canvas.toDataURL('image/jpeg', 0.92);
+      link.click();
+    } else {
+      const imgData = canvas.toDataURL('image/jpeg', 0.92);
+      // canvas is 2x scale for sharpness — divide back down for the PDF's point size
+      const w = canvas.width / 2, h = canvas.height / 2;
+      const pdf = new window.jspdf.jsPDF({ orientation: 'portrait', unit: 'pt', format: [w, h] });
+      pdf.addImage(imgData, 'JPEG', 0, 0, w, h);
+      pdf.save(filenameBase + '.pdf');
+    }
+  });
+}
+
+document.getElementById('saveJpegBtn').addEventListener('click', () => downloadRecord('jpeg'));
+document.getElementById('savePdfBtn').addEventListener('click', () => downloadRecord('pdf'));
 
 document.getElementById('emailBtn').addEventListener('click', () => {
   if (!validate()) {
