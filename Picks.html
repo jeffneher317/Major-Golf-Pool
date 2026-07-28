@@ -107,9 +107,13 @@
 
   <div class="card">
     <h2>Your Info</h2>
-    <label for="entrantName">Your Name (exactly as you want it on the leaderboard)</label>
-    <input type="text" id="entrantName" placeholder="e.g. Jeff Neher" autocomplete="name">
-    <div class="err" id="nameErr">Please enter your name.</div>
+    <label for="firstName">First Name</label>
+    <input type="text" id="firstName" placeholder="e.g. Jeff" autocomplete="given-name">
+    <label for="lastName">Last Name</label>
+    <input type="text" id="lastName" placeholder="e.g. Neher" autocomplete="family-name">
+    <div class="err" id="nameErr">Please enter your first and last name.</div>
+    <label for="aliasName">Nickname / Alias <span style="font-weight:400; color:#889;">(optional — only if you go by something else)</span></label>
+    <input type="text" id="aliasName" placeholder="e.g. Jay" autocomplete="off">
     <p class="note">Pick from each of the 5 groups below (5 from Group A, 4 from Group B, 3 from Group C, 2 from Group D, 1 from Group E — 15 total), plus 1 alternate per group. The alternate only comes into play if one of your picks in that group withdraws before or during Round 1 or 2. No duplicate golfers across your whole team.</p>
   </div>
 
@@ -245,8 +249,10 @@ if (new URLSearchParams(window.location.search).get('autofill') === 'jeff') {
   fillBtn.style.cssText = 'background:#fdf3d0;border:1px solid var(--gold);color:#7a6420;' +
     'font-size:.8rem; font-weight:600; padding:8px 10px;';
   fillBtn.addEventListener('click', () => {
-    if (!document.getElementById('entrantName').value.trim()) {
-      document.getElementById('entrantName').value = 'Test Entrant ' + Math.floor(Math.random() * 10000);
+    if (!document.getElementById('firstName').value.trim() && !document.getElementById('lastName').value.trim()) {
+      const n = Math.floor(Math.random() * 10000);
+      document.getElementById('firstName').value = 'Test';
+      document.getElementById('lastName').value = 'Entrant ' + n;
     }
     groupNames.forEach(g => {
       const shuffled = GROUPS[g].slice();
@@ -260,6 +266,13 @@ if (new URLSearchParams(window.location.search).get('autofill') === 'jeff') {
     });
   });
   document.querySelector('.wrap').insertBefore(fillBtn, document.getElementById('groupsContainer'));
+}
+
+function getNameParts() {
+  const first = document.getElementById('firstName').value.trim();
+  const last = document.getElementById('lastName').value.trim();
+  const alias = document.getElementById('aliasName').value.trim();
+  return { first, last, alias, full: `${first} ${last}`.trim() };
 }
 
 function collectPicks() {
@@ -276,15 +289,15 @@ function collectPicks() {
 }
 
 function validate() {
-  const name = document.getElementById('entrantName').value.trim();
+  const { first, last } = getNameParts();
   const nameErr = document.getElementById('nameErr');
   let ok = true;
   let problems = [];
 
-  if (!name) {
+  if (!first || !last) {
     nameErr.style.display = 'block';
     ok = false;
-    problems.push('enter your name');
+    problems.push('enter your first and last name');
   } else {
     nameErr.style.display = 'none';
   }
@@ -331,7 +344,7 @@ function validate() {
 }
 
 function buildSummary() {
-  const name = document.getElementById('entrantName').value.trim();
+  const { full: name } = getNameParts();
   const { data } = collectPicks();
   let lines = [`${TOURNAMENT_NAME} — Picks for ${name}`, ''];
   const csvFields = [name];
@@ -382,11 +395,21 @@ document.getElementById('submitBtn').addEventListener('click', () => {
 });
 
 document.getElementById('submitOnlineBtn').addEventListener('click', () => {
+  // Re-validate here too — a "Review" pass earlier doesn't guarantee the
+  // fields are still filled in if the entrant went back and cleared
+  // something before clicking Submit.
+  if (!validate()) {
+    document.getElementById('validationErr').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
   const btn = document.getElementById('submitOnlineBtn');
-  const name = document.getElementById('entrantName').value.trim();
+  const { first, last, alias, full: name } = getNameParts();
   const { data } = collectPicks();
 
-  const payload = { secret: SUBMIT_SECRET, tournament: TOURNAMENT_ID, entrantName: name };
+  const payload = {
+    secret: SUBMIT_SECRET, tournament: TOURNAMENT_ID,
+    entrantName: name, firstName: first, lastName: last, alias: alias
+  };
   groupNames.forEach(g => {
     const key = g.replace(/\s+/g, '');
     for (let p = 1; p <= GROUP_PICKS[g]; p++) {
@@ -416,7 +439,11 @@ document.getElementById('submitOnlineBtn').addEventListener('click', () => {
 });
 
 document.getElementById('emailBtn').addEventListener('click', () => {
-  const name = document.getElementById('entrantName').value.trim();
+  if (!validate()) {
+    document.getElementById('validationErr').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
+  const { full: name } = getNameParts();
   const { text, emailCsv } = buildSummary();
   const subject = encodeURIComponent(`${TOURNAMENT_NAME} Picks — ${name}`);
   const body = encodeURIComponent(
