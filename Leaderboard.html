@@ -149,11 +149,12 @@
     <div class="scorecard-grid" id="scorecardGrid"></div>
   </div>
   <div class="panel" id="panel-tiebreakers">
-    <div class="note">Auto-detected ties for Day 1-4 and Overall, resolved using the same rule Chip
-      uses: compare each tied entrant's next-best pick beyond the ones that count (11th pick for
-      Day 1/2, 6th pick for Day 3/4/Overall), lowest score wins that level, repeat until broken.
-      If all 15 picks tie, the spot splits. Each card has a starter paragraph you can copy into the
-      results email and dress up.</div>
+    <div class="note">Only payout-relevant ties show here: the Daily winner (Day 1-4, populates once that
+      round is final), and Overall places 1-<span id="tb-payout-spots-note"></span> (live, updates as
+      scores come in). Resolved using the same rule Chip uses: compare each tied entrant's next-best
+      pick beyond the ones that count (11th pick for Day 1/2, 6th pick for Day 3/4/Overall), lowest
+      score wins that level, repeat until broken. If all 15 picks tie, the spot(s) split. Each card has
+      a starter paragraph you can copy into the results email and dress up.</div>
     <div id="tiebreakerReport"></div>
   </div>
 
@@ -169,6 +170,7 @@ const PAR = 70;
 const REFRESH_MS = 90 * 1000; // how often to auto re-pull live data
 const GROUP_PICKS = {"Group A": 5, "Group B": 4, "Group C": 3, "Group D": 2, "Group E": 1}; // 15 total picks per entrant
 const POOL_TIMEZONE = "America/New_York"; // must match the Google Sheet's configured timezone (Submitted At column)
+const OVERALL_PAYOUT_SPOTS = 6; // how many Overall places get paid -- bump this up as the pool grows
 /* =================================================================================== */
 
 /* ---- Picks TSV column layout (0-indexed), matches the Google Sheet / Apps Script schema ---- */
@@ -611,55 +613,17 @@ document.getElementById("tabs").addEventListener("click", (e) => {
 // Mirrors the rule Chip Brunt spells out in his Day 1-4 results emails: a day's total is the
 // best N of an entrant's 15 picks (N=10 for Day1/Day2, N=5 for Day3/Day4/Overall). If two or
 // more entrants tie on that total, compare their (N+1)th-best pick, then (N+2)th, and so on --
-// lowest (best/most-under-par) score wins that level and survives to the next; anyone worse is
-// eliminated. If it goes all the way through all 15 picks still tied, the spot splits.
+// lowest (best/most-under-par) score wins that level; anyone worse falls out of contention for
+// that spot. If it goes all the way through all 15 picks still tied, the spot(s) split.
+//
+// Scope, per Jeff:
+//  - Daily (Day 1-4): only the rank-1 tie matters (there's one daily winner), and it shouldn't
+//    populate until that round is actually final -- a mid-round "tie" is meaningless noise.
+//  - Overall: ties across the paid places (1..OVERALL_PAYOUT_SPOTS) matter, and this one's fine
+//    to run live since Overall is already a running total throughout the tournament.
 function ordinal(n) {
   const s = ["th", "st", "nd", "rd"], v = n % 100;
   return n + (s[(v - 20) % 10] || s[v] || s[0]);
-}
-
-function resolveTie(tiedEntrants, valuesKey, n) {
-  let candidates = tiedEntrants.map(e => ({
-    entrant: e,
-    sorted: e.slots.map(s => s[valuesKey]).filter(v => typeof v === "number").sort((a, b) => a - b),
-  }));
-  const steps = [];
-  let level = n; // 0-indexed position of the next tiebreak pick (n=10 -> position 10 is the "11th" pick)
-  while (candidates.length > 1 && level < 15) {
-    const withVal = candidates.map(c => ({ c, v: c.sorted[level] }));
-    const present = withVal.filter(x => typeof x.v === "number");
-    if (present.length === 0) { level++; continue; }
-    const min = Math.min(...present.map(x => x.v));
-    steps.push({ ord: level + 1, values: withVal.map(x => ({ name: x.c.entrant.fullName, v: x.v })) });
-    candidates = withVal.filter(x => x.v === min).map(x => x.c);
-    level++;
-  }
-  return {
-    winner: candidates.length === 1 ? candidates[0].entrant : null,
-    split: candidates.length > 1,
-    finalists: candidates.map(c => c.entrant),
-    steps,
-  };
-}
-
-// Finds every group of entrants tied on a given day/overall total, and resolves each one.
-function computeTiebreakGroups(computed, dayKey, n, valuesKey) {
-  const ranked = rankWithTies(computed, dayKey);
-  const groups = [];
-  let i = 0;
-  while (i < ranked.length) {
-    if (ranked[i].tied) {
-      const score = ranked[i][dayKey];
-      const group = [];
-      let j = i;
-      while (j < ranked.length && ranked[j][dayKey] === score) { group.push(ranked[j]); j++; }
-      groups.push({ rank: ranked[i].rank, score, entrants: group });
-      i = j;
-    } else {
-      i++;
-    }
-  }
-  return groups.map(g => ({ ...g, resolution: resolveTie(g.entrants, valuesKey, n) }));
 }
 
 function namesJoin(names) {
@@ -668,76 +632,188 @@ function namesJoin(names) {
   return names.slice(0, -1).join(", ") + " and " + names[names.length - 1];
 }
 
-// Builds a plain-English starter paragraph in the same spirit as Chip's writeups -- states the
-// tie, the deciding pick(s), and the winner (or the split). Meant to be pasted into the results
-// email and dressed up with color commentary, not sent verbatim.
-function buildTiebreakWriteup(dayLabel, group) {
-  const names = group.entrants.map(e => e.fullName);
-  const scoreStr = fmtScore(group.score);
-  const res = group.resolution;
-  if (res.winner) {
-    const decidingStep = res.steps[res.steps.length - 1];
-    const winnerVal = decidingStep.values.find(v => v.name === res.winner.fullName).v;
-    const others = decidingStep.values.filter(v => v.name !== res.winner.fullName)
-      .map(v => v.name + " (" + fmtScore(v.v) + ")").join(", ");
-    let text = `We had a ${names.length}-way tie for ${dayLabel} between ${namesJoin(names)}, all at (${scoreStr}). `;
-    if (res.steps.length > 1) {
-      text += `It took a few levels to sort out, but `;
-    }
-    text += `${res.winner.fullName} wins the tiebreaker with their ${ordinal(decidingStep.ord)} best player's score of (${fmtScore(winnerVal)})`;
-    if (others) text += ` compared to ${others}`;
-    text += `. Congrats ${res.winner.fullName}!`;
-    return text;
-  } else {
-    return `We had a tie for ${dayLabel} between ${namesJoin(names)}, all at (${scoreStr}), that couldn't be broken even after ` +
-      `comparing all 15 picks. Per the rules, this spot splits evenly between ${namesJoin(names)}.`;
+// A round is "complete" once every golfer who actually played it (i.e. not cut, not withdrawn)
+// has a posted score for it. Uses the same live ESPN map already loaded for scoring, so no extra
+// fetch needed. Rounds 3/4 naturally exclude cut golfers since they never post those rounds.
+function isRoundComplete(scoresMap, roundNum) {
+  let sawAny = false;
+  for (const g of scoresMap.values()) {
+    if (g.wd) continue;
+    if (g.cut && roundNum >= 3) continue;
+    sawAny = true;
+    if (g["r" + roundNum] == null) return false;
   }
+  return sawAny;
 }
 
-const DAY_TIEBREAK_CONFIG = [
-  { key: "day1", label: "Day 1", n: 10, valuesKey: "r1" },
-  { key: "day2", label: "Day 2", n: 10, valuesKey: "r2" },
-  { key: "day3", label: "Day 3", n: 5, valuesKey: "r3" },
-  { key: "day4", label: "Day 4", n: 5, valuesKey: "r4" },
-  { key: "overall", label: "the Overall", n: 5, valuesKey: "liveTotal" },
-];
+// Produces a full finishing order for a group of same-score entrants, using the tiebreak rule.
+// Returns an array of "clusters" in finishing order -- most clusters are a single entrant, but a
+// cluster has more than one entrant when they're genuinely tied even after all 15 picks (their
+// spots split). Each row also records which pick level separated it from the entrant ranked just
+// above it (null for the first row, since there's nothing above it to separate from).
+function orderTiedGroup(tiedEntrants, valuesKey, n) {
+  const withSorted = tiedEntrants.map(e => ({
+    entrant: e,
+    sorted: e.slots.map(s => s[valuesKey]).filter(v => typeof v === "number").sort((a, b) => a - b),
+  }));
+  function cmp(a, b) {
+    for (let lvl = n; lvl < 15; lvl++) {
+      const av = a.sorted[lvl], bv = b.sorted[lvl];
+      const aHas = typeof av === "number", bHas = typeof bv === "number";
+      if (!aHas && !bHas) continue;
+      if (!aHas) return 1;
+      if (!bHas) return -1;
+      if (av !== bv) return av - bv;
+    }
+    return 0;
+  }
+  withSorted.sort(cmp);
+  const rows = withSorted.map((w, i) => {
+    let decidingLevel = null, splitWithPrev = false;
+    if (i > 0) {
+      for (let lvl = n; lvl < 15; lvl++) {
+        const pv = withSorted[i - 1].sorted[lvl], cv = w.sorted[lvl];
+        if (pv !== cv) { decidingLevel = lvl + 1; break; }
+      }
+      if (decidingLevel === null) splitWithPrev = true;
+    }
+    return { entrant: w.entrant, sorted: w.sorted, decidingLevel, splitWithPrev };
+  });
+  const clusters = [];
+  for (const row of rows) {
+    if (row.splitWithPrev && clusters.length) clusters[clusters.length - 1].push(row);
+    else clusters.push([row]);
+  }
+  return clusters;
+}
 
-function renderTiebreakers(computed) {
+// Finds every group of entrants tied on a given day/overall total, restricted to groups whose
+// rank falls at or before maxRank (e.g. only the rank-1 group for Daily; ranks 1..payout spots
+// for Overall). A group starting below maxRank is still included in full even if it runs past
+// maxRank, since resolving it is exactly what decides who makes it into the paid spots.
+function computeTiebreakGroups(computed, dayKey, n, valuesKey, maxRank) {
+  const ranked = rankWithTies(computed, dayKey);
+  const groups = [];
+  let i = 0;
+  while (i < ranked.length) {
+    if (ranked[i].tied && ranked[i].rank <= maxRank) {
+      const score = ranked[i][dayKey];
+      const group = [];
+      let j = i;
+      while (j < ranked.length && ranked[j][dayKey] === score) { group.push(ranked[j]); j++; }
+      groups.push({ rank: ranked[i].rank, score, entrants: group, clusters: orderTiedGroup(group, valuesKey, n) });
+      i = j;
+    } else {
+      i++;
+    }
+  }
+  return groups;
+}
+
+function renderTiebreakGroup(label, g, startRank) {
+  const totalCount = g.entrants.length;
+  const isSplitOnly = g.clusters.length === 1; // nobody separated at all -- everyone stays tied
+  let html = `<div class="tb-group ${isSplitOnly ? "tb-split" : ""}">`;
+  html += `<h3>${label} — ${totalCount}-way tie at rank ${startRank} (${fmtScore(g.score)})</h3>`;
+  html += `<div class="tb-scoreline">Tied: ${g.entrants.map(e => e.fullName).join(", ")}</div>`;
+  html += `<table><thead><tr><th>Finish</th><th>Entrant</th><th>Decided by</th></tr></thead><tbody>`;
+  let rank = startRank;
+  for (const cluster of g.clusters) {
+    const placeLabel = cluster.length > 1
+      ? `${ordinal(rank)}-${ordinal(rank + cluster.length - 1)} (split)`
+      : ordinal(rank);
+    for (let k = 0; k < cluster.length; k++) {
+      const row = cluster[k];
+      const decidedBy = row.decidingLevel ? `${ordinal(row.decidingLevel)} pick (${fmtScore(row.sorted[row.decidingLevel - 1])})` :
+        (k === 0 ? (rank === startRank ? "—" : "still tied through all 15") : "still tied through all 15");
+      html += `<tr><td class="${k === 0 ? "tb-winner-cell" : ""}">${k === 0 ? placeLabel : ""}</td>` +
+        `<td>${row.entrant.fullName}</td><td>${decidedBy}</td></tr>`;
+    }
+    rank += cluster.length;
+  }
+  html += `</tbody></table>`;
+  const draftId = "tbdraft-" + label.replace(/\W+/g, "") + "-" + startRank;
+  const draftText = buildTiebreakWriteup(label, g, startRank);
+  html += `<div class="tb-draft" id="${draftId}">${draftText}</div>`;
+  html += `<button type="button" class="tb-copybtn" data-target="${draftId}">Copy draft paragraph</button>`;
+  html += `</div>`;
+  return html;
+}
+
+// Builds a plain-English starter paragraph in the spirit of Chip's writeups. For Daily, this is
+// just the single winner. For Overall, it walks place-by-place since multiple paid spots can be
+// tied together. Meant to be pasted into the results email and dressed up, not sent verbatim.
+function buildTiebreakWriteup(label, g, startRank) {
+  const scoreStr = fmtScore(g.score);
+  const allNames = g.entrants.map(e => e.fullName);
+  if (label !== "Overall") {
+    const winnerCluster = g.clusters[0];
+    if (winnerCluster.length > 1) {
+      return `We had a ${allNames.length}-way tie for the ${label} Daily between ${namesJoin(allNames)}, all at (${scoreStr}), ` +
+        `that couldn't be broken even after comparing all 15 picks. Per the rules, today's payout splits evenly between ${namesJoin(allNames)}.`;
+    }
+    const winner = winnerCluster[0];
+    const runnerUpRow = g.clusters[1] ? g.clusters[1][0] : null;
+    let text = `We had a ${allNames.length}-way tie for the ${label} Daily between ${namesJoin(allNames)}, all at (${scoreStr}). `;
+    if (runnerUpRow) {
+      text += `${winner.entrant.fullName} wins the tiebreaker with their ${ordinal(runnerUpRow.decidingLevel)} best player's score ` +
+        `of (${fmtScore(winner.sorted[runnerUpRow.decidingLevel - 1])}). Congrats ${winner.entrant.fullName}!`;
+    } else {
+      text += `${winner.entrant.fullName} wins the tiebreaker. Congrats ${winner.entrant.fullName}!`;
+    }
+    return text;
+  }
+  // Overall: place-by-place breakdown
+  let text = `We have a ${allNames.length}-way tie for the Overall spot${allNames.length > 1 ? "s" : ""} starting at ${ordinal(startRank)} place, all at (${scoreStr}).\n\n`;
+  let rank = startRank;
+  for (const cluster of g.clusters) {
+    if (cluster.length > 1) {
+      text += `${ordinal(rank)}-${ordinal(rank + cluster.length - 1)}: ${namesJoin(cluster.map(r => r.entrant.fullName))} are tied even ` +
+        `after comparing all 15 picks -- these spots split evenly.\n`;
+    } else {
+      const row = cluster[0];
+      if (row.decidingLevel) {
+        text += `${ordinal(rank)} Place goes to ${row.entrant.fullName}, deciding on their ${ordinal(row.decidingLevel)} best player's score (${fmtScore(row.sorted[row.decidingLevel - 1])}).\n`;
+      } else {
+        text += `${ordinal(rank)} Place goes to ${row.entrant.fullName}.\n`;
+      }
+    }
+    rank += cluster.length;
+  }
+  return text;
+}
+
+function renderTiebreakers(computed, scoreData) {
   const box = document.getElementById("tiebreakerReport");
   let html = "";
   let anyTies = false;
-  for (const cfg of DAY_TIEBREAK_CONFIG) {
-    const groups = computeTiebreakGroups(computed, cfg.key, cfg.n, cfg.valuesKey);
+
+  // --- Daily: rank-1 only, gated on the round being final ---
+  const DAILY_CONFIG = [
+    { key: "day1", label: "Day 1", n: 10, valuesKey: "r1", roundNum: 1 },
+    { key: "day2", label: "Day 2", n: 10, valuesKey: "r2", roundNum: 2 },
+    { key: "day3", label: "Day 3", n: 5, valuesKey: "r3", roundNum: 3 },
+    { key: "day4", label: "Day 4", n: 5, valuesKey: "r4", roundNum: 4 },
+  ];
+  for (const cfg of DAILY_CONFIG) {
+    if (!isRoundComplete(scoreData.map, cfg.roundNum)) continue; // don't populate until the round is final
+    const groups = computeTiebreakGroups(computed, cfg.key, cfg.n, cfg.valuesKey, 1);
     for (const g of groups) {
       anyTies = true;
-      const res = g.resolution;
-      html += `<div class="tb-group ${res.split ? "tb-split" : ""}">`;
-      html += `<h3>${cfg.label} — ${res.split ? "Unresolved tie" : "Tie resolved"} at rank ${g.rank} (${fmtScore(g.score)})</h3>`;
-      html += `<div class="tb-scoreline">Tied: ${g.entrants.map(e => e.fullName).join(", ")}</div>`;
-      if (res.steps.length > 0) {
-        html += `<table><thead><tr><th>Entrant</th>`;
-        for (const step of res.steps) html += `<th>${ordinal(step.ord)} pick</th>`;
-        html += `</tr></thead><tbody>`;
-        for (const name of g.entrants.map(e => e.fullName)) {
-          html += `<tr><td>${name}</td>`;
-          for (const step of res.steps) {
-            const cell = step.values.find(v => v.name === name);
-            const isWinnerCell = res.winner && res.winner.fullName === name && step === res.steps[res.steps.length - 1];
-            html += `<td class="${isWinnerCell ? "tb-winner-cell" : ""}">${cell ? fmtScore(cell.v) : "–"}</td>`;
-          }
-          html += `</tr>`;
-        }
-        html += `</tbody></table>`;
-      }
-      const draftId = "tbdraft-" + cfg.key + "-" + g.rank;
-      const draftText = buildTiebreakWriteup(cfg.label, g);
-      html += `<div class="tb-draft" id="${draftId}">${draftText}</div>`;
-      html += `<button type="button" class="tb-copybtn" data-target="${draftId}">Copy draft paragraph</button>`;
-      html += `</div>`;
+      html += renderTiebreakGroup(cfg.label, g, g.rank);
     }
   }
+
+  // --- Overall: ranks 1..OVERALL_PAYOUT_SPOTS, live ---
+  const overallGroups = computeTiebreakGroups(computed, "overall", 5, "liveTotal", OVERALL_PAYOUT_SPOTS);
+  for (const g of overallGroups) {
+    anyTies = true;
+    html += renderTiebreakGroup("Overall", g, g.rank);
+  }
+
   if (!anyTies) {
-    html = `<div class="tb-none">No ties right now on Day 1-4 or Overall. This report updates automatically as scores come in.</div>`;
+    html = `<div class="tb-none">No payout-relevant ties right now (Daily winner spot, or Overall places 1-${OVERALL_PAYOUT_SPOTS}). ` +
+      `This report updates automatically -- Daily ties populate once that round is final; Overall updates live.</div>`;
   }
   box.innerHTML = html;
   box.querySelectorAll(".tb-copybtn").forEach(btn => {
@@ -773,7 +849,7 @@ async function refreshAll() {
     renderScorecards(computed.slice().sort((a, b) =>
       (a.lastName || a.fullName).localeCompare(b.lastName || b.fullName) || a.fullName.localeCompare(b.fullName)
     ));
-    renderTiebreakers(computed);
+    renderTiebreakers(computed, scoreData);
 
     document.getElementById("eventSub").textContent = scoreData.eventName + (scoreData.status ? " — " + scoreData.status : "");
     statusEl.textContent = "Last updated " + new Date().toLocaleTimeString();
@@ -799,6 +875,7 @@ async function refreshAll() {
 
 document.getElementById("refreshBtn").addEventListener("click", refreshAll);
 document.getElementById("pageTitle").textContent = TOURNAMENT_NAME.replace(" — Detroit Golf Club", "") + " — Live Leaderboard";
+document.getElementById("tb-payout-spots-note").textContent = OVERALL_PAYOUT_SPOTS;
 refreshAll();
 setInterval(refreshAll, REFRESH_MS);
 </script>
