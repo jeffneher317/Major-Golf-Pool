@@ -68,6 +68,10 @@
   .sc-card table{font-size:.78rem;}
   .sc-card th{position:static; font-size:.68rem;}
   .cut{color:var(--red); font-weight:600;}
+  .locked-badge{
+    display:inline-block; background:var(--lightred); color:var(--red); font-size:.68rem;
+    padding:2px 8px; border-radius:10px; margin-left:8px; font-weight:700; vertical-align:middle;
+  }
   .searchbox{
     width:100%; max-width:320px; padding:8px 10px; border:1px solid var(--border);
     border-radius:6px; font-size:.9rem; margin:0 auto 14px; display:block;
@@ -126,6 +130,7 @@ const ESPN_EVENT_ID = "401811960"; // ESPN's internal event id for this tourname
 const PAR = 70;
 const REFRESH_MS = 90 * 1000; // how often to auto re-pull live data
 const GROUP_PICKS = {"Group A": 5, "Group B": 4, "Group C": 3, "Group D": 2, "Group E": 1}; // 15 total picks per entrant
+const POOL_TIMEZONE = "America/New_York"; // must match the Google Sheet's configured timezone (Submitted At column)
 /* =================================================================================== */
 
 /* ---- Picks TSV column layout (0-indexed), matches the Google Sheet / Apps Script schema ---- */
@@ -172,6 +177,37 @@ function parseTSV(text) {
   return rows;
 }
 
+function parseSheetTimestamp(s) {
+  if (!s) return null;
+  const t = new Date(s).getTime();
+  return isNaN(t) ? null : t;
+}
+
+function utcToPoolTime(utcIso) {
+  // Converts a UTC ISO timestamp (e.g. ESPN's teeTime "2026-07-30T11:00Z") into the pool's
+  // timezone. Returns two things:
+  //  - parseable: an "M/D/YYYY H:MM:SS" string, deliberately built to look just like the
+  //    "Submitted At" strings Google Sheets writes. When a browser naively parses (new Date(...))
+  //    BOTH this string and a real submittedAt string, any bias from the browser not actually
+  //    being in the pool's timezone applies equally to both -- so their relative order (which is
+  //    all the lock-time check needs) comes out correct even without real timezone math.
+  //  - display: a human-readable string for showing in the UI, formatted directly from the
+  //    correct source Date (no re-parsing, so no double timezone conversion).
+  const d = new Date(utcIso);
+  const parts = {};
+  for (const p of new Intl.DateTimeFormat("en-US", {
+    timeZone: POOL_TIMEZONE, year: "numeric", month: "numeric", day: "numeric",
+    hour: "numeric", minute: "2-digit", second: "2-digit", hour12: false,
+  }).formatToParts(d)) parts[p.type] = p.value;
+  const hour24 = parts.hour === "24" ? "0" : parts.hour;
+  const parseable = `${parts.month}/${parts.day}/${parts.year} ${hour24}:${parts.minute}:${parts.second}`;
+  const display = new Intl.DateTimeFormat("en-US", {
+    timeZone: POOL_TIMEZONE, month: "short", day: "numeric",
+    hour: "numeric", minute: "2-digit", hour12: true, timeZoneName: "short",
+  }).format(d);
+  return { parseable, display };
+}
+
 function showError(msg) {
   const box = document.getElementById("dataError");
   box.style.display = "block";
@@ -188,10 +224,10 @@ async function fetchPicks() {
   const text = await res.text();
   const rows = parseTSV(text);
 
-  // Group by normalized (last+first) name, keep only the latest submission per entrant --
-  // this is a simplified stand-in for Workbook A's full duplicate/late-approval workflow,
-  // which involves a manual review step that doesn't make sense for a fully-automatic public page.
-  const byEntrant = new Map();
+  // Returns EVERY submission row as-is (not deduped) -- picking which one counts per entrant
+  // happens in selectEntrants(), since that decision now depends on the picks-lock time, which
+  // isn't known until fetchScores() has also run.
+  const submissions = [];
   for (const r of rows) {
     const fullName = (r[COL.name] || "").trim();
     if (!fullName) continue;
@@ -201,16 +237,43 @@ async function fetchPicks() {
       : fullName;
     const key = normalizeName(lastName) + "|" + normalizeName(firstName);
     const submittedAt = r[COL.submittedAt] || "";
-    const existing = byEntrant.get(key);
-    if (!existing || submittedAt > existing.submittedAt) {
-      const picks = SLOTS.map(([pickCol, altCol]) => ({
-        primary: (r[pickCol] || "").trim(),
-        alt: (r[altCol] || "").trim(),
-      }));
-      byEntrant.set(key, { fullName, lastName, firstName, submittedAt, picks });
+    const picks = SLOTS.map(([pickCol, altCol]) => ({
+      primary: (r[pickCol] || "").trim(),
+      alt: (r[altCol] || "").trim(),
+    }));
+    submissions.push({ key, fullName, lastName, firstName, submittedAt, picks });
+  }
+  return submissions;
+}
+
+/* ====================== resolve one submission per entrant, honoring the picks lock ====================== */
+function selectEntrants(submissions, lockTime) {
+  // lockTime is the {parseable, display} object from utcToPoolTime(), or null if Round 1 hasn't
+  // produced a real score yet (picks stay open with no cutoff).
+  const lockMs = lockTime ? parseSheetTimestamp(lockTime.parseable) : null;
+  const groups = new Map();
+  for (const s of submissions) {
+    if (!groups.has(s.key)) groups.set(s.key, []);
+    groups.get(s.key).push({ ...s, ms: parseSheetTimestamp(s.submittedAt) });
+  }
+  const out = [];
+  for (const list of groups.values()) {
+    const onTime = lockMs == null ? list : list.filter(s => s.ms == null || s.ms <= lockMs);
+    if (onTime.length > 0) {
+      // Latest on-time submission wins -- this is a simplified stand-in for Workbook A's full
+      // duplicate/late-approval workflow, which involves a manual review step that doesn't make
+      // sense for a fully-automatic public page.
+      const best = onTime.reduce((a, b) => (b.ms ?? -Infinity) > (a.ms ?? -Infinity) ? b : a);
+      out.push({ ...best, locked: false });
+    } else {
+      // Every submission this entrant made came in after the lock. Keep them visible (using
+      // their earliest attempt, just for name/timestamp display) rather than silently dropping
+      // them, but clear their picks so nothing scores.
+      const earliestLate = list.reduce((a, b) => (b.ms ?? Infinity) < (a.ms ?? Infinity) ? b : a);
+      out.push({ ...earliestLate, picks: SLOTS.map(() => ({ primary: "", alt: "" })), locked: true });
     }
   }
-  return Array.from(byEntrant.values());
+  return out;
 }
 
 /* ====================== fetch: live scores ====================== */
@@ -228,6 +291,8 @@ async function fetchScores() {
   const competitors = (comp && comp.competitors) || [];
 
   const map = new Map(); // normalized name -> {rawName, r1,r2,r3,r4 (each vs. par), status}
+  let roundOneStarted = false;      // true once ANY competitor has a real posted Round 1 score
+  let earliestR1TeeTimeUTC = null;  // earliest Round 1 tee time across the whole field
   for (const c of competitors) {
     const rawName = c.athlete && c.athlete.displayName;
     if (!rawName) continue;
@@ -235,6 +300,9 @@ async function fetchScores() {
     if (Array.isArray(c.linescores)) {
       for (const ls of c.linescores) {
         const period = ls.period;
+        if (period === 1 && ls.teeTime) {
+          if (!earliestR1TeeTimeUTC || ls.teeTime < earliestR1TeeTimeUTC) earliestR1TeeTimeUTC = ls.teeTime;
+        }
         // ESPN's round-level linescore entry carries BOTH the raw stroke count (value: 70) and
         // an already-computed to-par string (displayValue: "-2", "E", "+3") -- using their own
         // computed to-par directly means this page never needs its own PAR constant to agree
@@ -242,6 +310,7 @@ async function fetchScores() {
         // tournament. parseToPar("E") -> 0, parseToPar("-2") -> -2, parseToPar("+3") -> 3.
         if (period >= 1 && period <= 4 && ls.displayValue != null && ls.displayValue !== "") {
           rounds[period] = parseToPar(ls.displayValue);
+          if (period === 1) roundOneStarted = true;
         }
       }
     }
@@ -253,7 +322,18 @@ async function fetchScores() {
       cut: isCut, wd: isWD,
     });
   }
-  return { map, eventName: event.name || TOURNAMENT_NAME, status: (event.status && event.status.type && event.status.type.description) || "" };
+
+  // Picks lock the moment the first real Round 1 score actually shows up -- proof play has
+  // started -- rather than trusting a configured start time that could be wrong or missing. The
+  // cutoff INSTANT used is the earliest Round 1 tee time (a fixed point), not "whenever we
+  // happened to poll", so the lock doesn't creep later depending on refresh timing.
+  const lockTime = (roundOneStarted && earliestR1TeeTimeUTC) ? utcToPoolTime(earliestR1TeeTimeUTC) : null;
+
+  return {
+    map, eventName: event.name || TOURNAMENT_NAME,
+    status: (event.status && event.status.type && event.status.type.description) || "",
+    lockTime,
+  };
 }
 
 function parseToPar(displayValue) {
@@ -382,8 +462,8 @@ function renderScorecards(entrants) {
     }
     div.innerHTML = `
       <div class="sc-head">
-        <div class="nm">${e.fullName}</div>
-        <div class="sub">Day1: ${fmtScore(e.day1)} &nbsp; Day2: ${fmtScore(e.day2)} &nbsp; Day3: ${fmtScore(e.day3)} &nbsp; Day4: ${fmtScore(e.day4)} &nbsp; Overall: ${fmtScore(e.overall)}</div>
+        <div class="nm">${e.fullName}${e.locked ? '<span class="locked-badge">⚠ Late — not counted</span>' : ''}</div>
+        <div class="sub">${e.locked ? "Submitted after picks locked (" + e.submittedAt + ") -- picks not counted." : "Day1: " + fmtScore(e.day1) + " &nbsp; Day2: " + fmtScore(e.day2) + " &nbsp; Day3: " + fmtScore(e.day3) + " &nbsp; Day4: " + fmtScore(e.day4) + " &nbsp; Overall: " + fmtScore(e.overall)}</div>
       </div>
       <table>
         <thead><tr><th>Player</th><th class="num">R1</th><th class="num">R2</th><th class="num">R3</th><th class="num">R4</th><th class="num">Total</th></tr></thead>
@@ -418,8 +498,9 @@ async function refreshAll() {
   const statusEl = document.getElementById("lastUpdated");
   statusEl.innerHTML = '<span class="spin"></span>Updating…';
   try {
-    const [entrantsRaw, scoreData] = await Promise.all([fetchPicks(), fetchScores()]);
+    const [submissions, scoreData] = await Promise.all([fetchPicks(), fetchScores()]);
     clearError();
+    const entrantsRaw = selectEntrants(submissions, scoreData.lockTime);
     const computed = entrantsRaw.map(e => computeEntrant(e, scoreData.map));
 
     renderDayTable("tbl-overall", rankWithTies(computed, "overall"), "overall", "Overall");
@@ -431,9 +512,16 @@ async function refreshAll() {
 
     document.getElementById("eventSub").textContent = scoreData.eventName + (scoreData.status ? " — " + scoreData.status : "");
     statusEl.textContent = "Last updated " + new Date().toLocaleTimeString();
+    const lockedCount = entrantsRaw.filter(e => e.locked).length;
+    const countNote = lockedCount > 0
+      ? (entrantsRaw.length - lockedCount) + " entrants loaded (" + lockedCount + " late submission" + (lockedCount === 1 ? "" : "s") + " excluded)."
+      : entrantsRaw.length + " entrants loaded.";
+    const lockNote = scoreData.lockTime
+      ? " Picks locked as of " + scoreData.lockTime.display + " (first tee time)."
+      : " Picks remain open until Round 1 begins.";
     document.getElementById("footNote").textContent =
-      entrantsRaw.length + " entrants loaded. Scores pulled live from ESPN; refreshes automatically every " +
-      Math.round(REFRESH_MS / 1000) + "s, or hit Refresh now.";
+      countNote + " Scores pulled live from ESPN; refreshes automatically every " +
+      Math.round(REFRESH_MS / 1000) + "s, or hit Refresh now." + lockNote;
   } catch (err) {
     showError("Couldn't fully refresh: " + err.message + "\n\nThis page fetches live from Google Sheets and ESPN " +
       "directly in your browser -- if either source is briefly unavailable, or blocks cross-site requests, this " +
