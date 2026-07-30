@@ -67,6 +67,10 @@
   .sc-head .sub{font-size:.72rem; opacity:.9; margin-top:2px;}
   .sc-card table{font-size:.78rem;}
   .sc-card th{position:static; font-size:.68rem;}
+  .sc-rank{
+    display:block; font-size:.62rem; font-weight:700; color:var(--gold);
+    letter-spacing:.02em; margin-top:1px;
+  }
   .cut{color:var(--red); font-weight:600;}
   .locked-badge{
     display:inline-block; background:var(--lightred); color:var(--red); font-size:.68rem;
@@ -112,6 +116,10 @@
   .tb-copybtn:hover{background:var(--lightgreen);}
   .tb-copybtn.copied{background:var(--green); color:#fff; border-color:var(--green);}
   .tb-none{text-align:center; color:#889; font-size:.85rem; padding:20px 0;}
+  .tb-provisional{
+    background:var(--lightgold); border:1px solid var(--gold); border-radius:8px;
+    padding:10px 14px; font-size:.82rem; color:#5a4a10; margin-bottom:16px; line-height:1.5;
+  }
   .tb-scorecards{margin:12px 0 6px;}
   .sc-card td.tb-decider{
     font-weight:700; border-radius:4px; box-shadow:inset 0 0 0 2px #3b6fd4;
@@ -165,7 +173,7 @@
   <div class="panel" id="panel-tiebreakers">
     <div class="note">Only payout-relevant ties show here: the Daily winner (Day 1-4, populates once that
       round is final), and Overall places 1-<span id="tb-payout-spots-note"></span> (live, updates as
-      scores come in). Resolved using the same rule Chip uses: compare each tied entrant's next-best
+      scores come in). Resolved per the season rules: compare each tied entrant's next-best
       pick beyond the ones that count (11th pick for Day 1/2, 6th pick for Day 3/4/Overall), lowest
       score wins that level, repeat until broken. If all 15 picks tie, the spot(s) split. Each card has
       a starter paragraph you can copy into the results email and dress up.</div>
@@ -185,6 +193,7 @@ const REFRESH_MS = 90 * 1000; // how often to auto re-pull live data
 const GROUP_PICKS = {"Group A": 5, "Group B": 4, "Group C": 3, "Group D": 2, "Group E": 1}; // 15 total picks per entrant
 const POOL_TIMEZONE = "America/New_York"; // must match the Google Sheet's configured timezone (Submitted At column)
 const OVERALL_PAYOUT_SPOTS = 5; // how many Overall places get paid, per the rules doc -- bump this up as the pool grows
+const OVERALL_TIEBREAK_DISPLAY_CAP = 6; // tiebreaker tab tracks ties through this place even if payout spots are fewer right now (room for the pool to grow) -- never shows 7th place or beyond
 /* =================================================================================== */
 
 /* ---- Picks TSV column layout (0-indexed), matches the Google Sheet / Apps Script schema ---- */
@@ -532,6 +541,20 @@ function rankWithTies(entrants, key) {
   return out;
 }
 
+// rankWithTies() returns copies (not the same object references as `computed`), so this stashes
+// each entrant's Day1-4/Overall rank onto their real computed object via `.ranks`, keyed by the
+// entrant's stable `.key` (normalized last|first name). Used to show a small rank badge on each
+// scorecard next to R1-R4/Total, right in the header of each entrant's own mini table.
+function attachRanks(computed) {
+  const dayKeys = ["day1", "day2", "day3", "day4", "overall"];
+  const byKey = {};
+  for (const e of computed) byKey[e.key] = {};
+  for (const dk of dayKeys) {
+    for (const r of rankWithTies(computed, dk)) byKey[r.key][dk] = { rank: r.rank, tied: r.tied };
+  }
+  for (const e of computed) e.ranks = byKey[e.key];
+}
+
 function fmtScore(n) {
   if (n == null) return "–";
   if (n === 0) return "E";
@@ -545,6 +568,16 @@ function fmtScoreLive(n, partial) {
 function fmtStanding(e) {
   if (e.rank == null) return "–";
   return e.tied ? `T${e.rank}` : String(e.rank);
+}
+// Small rank badge for a scorecard column header (e.g. "R2" with "T5" underneath) -- blank until
+// that round/overall actually has a score for this entrant, so Day 2-4 stay empty pre-tournament
+// and only populate once live.
+function headerRankHtml(e, dayKey) {
+  if (e[dayKey] == null) return "";
+  const info = e.ranks && e.ranks[dayKey];
+  if (!info || info.rank == null) return "";
+  const label = info.tied ? "T" + info.rank : String(info.rank);
+  return `<br><span class="sc-rank">${label}</span>`;
 }
 
 /* ====================== rendering ====================== */
@@ -599,7 +632,12 @@ function renderScorecards(entrants) {
         <div class="sub">${e.locked ? "Submitted after picks locked (" + e.submittedAt + ") -- picks not counted." : "Day1: " + fmtScoreLive(e.day1, e.day1Partial) + " &nbsp; Day2: " + fmtScoreLive(e.day2, e.day2Partial) + " &nbsp; Day3: " + fmtScoreLive(e.day3, e.day3Partial) + " &nbsp; Day4: " + fmtScoreLive(e.day4, e.day4Partial) + " &nbsp; Overall: " + fmtScoreLive(e.overall, e.overallPartial)}</div>
       </div>
       <table>
-        <thead><tr><th>Player</th><th class="num">R1</th><th class="num">R2</th><th class="num">R3</th><th class="num">R4</th><th class="num">Total</th></tr></thead>
+        <thead><tr><th>Player</th>` +
+        `<th class="num">R1${headerRankHtml(e, "day1")}</th>` +
+        `<th class="num">R2${headerRankHtml(e, "day2")}</th>` +
+        `<th class="num">R3${headerRankHtml(e, "day3")}</th>` +
+        `<th class="num">R4${headerRankHtml(e, "day4")}</th>` +
+        `<th class="num">Total${headerRankHtml(e, "overall")}</th></tr></thead>
         <tbody>${rows}${totalRow}</tbody>
       </table>`;
     grid.appendChild(div);
@@ -666,10 +704,15 @@ function isRoundComplete(scoresMap, roundNum) {
 // spots split). Each row also records which pick level separated it from the entrant ranked just
 // above it (null for the first row, since there's nothing above it to separate from).
 function orderTiedGroup(tiedEntrants, valuesKey, n) {
-  const withSorted = tiedEntrants.map(e => ({
-    entrant: e,
-    sorted: e.slots.map(s => s[valuesKey]).filter(v => typeof v === "number").sort((a, b) => a - b),
-  }));
+  const withSorted = tiedEntrants.map(e => {
+    // Keep each golfer's name paired with their score while sorting, so a deciding level can be
+    // traced back to exactly which golfer (and what they shot) settled it -- not just a number.
+    const pairs = e.slots
+      .filter(s => typeof s[valuesKey] === "number")
+      .map(s => ({ v: s[valuesKey], name: s.name }))
+      .sort((a, b) => a.v - b.v);
+    return { entrant: e, sorted: pairs.map(p => p.v), sortedNames: pairs.map(p => p.name) };
+  });
   function cmp(a, b) {
     for (let lvl = n; lvl < 15; lvl++) {
       const av = a.sorted[lvl], bv = b.sorted[lvl];
@@ -691,7 +734,7 @@ function orderTiedGroup(tiedEntrants, valuesKey, n) {
       }
       if (decidingLevel === null) splitWithPrev = true;
     }
-    return { entrant: w.entrant, sorted: w.sorted, decidingLevel, splitWithPrev };
+    return { entrant: w.entrant, sorted: w.sorted, sortedNames: w.sortedNames, decidingLevel, splitWithPrev };
   });
   const clusters = [];
   for (const row of rows) {
@@ -733,9 +776,20 @@ function compareOverallEntrants(a, b, round4Complete) {
 
 function orderOverallTiedGroup(tiedEntrants, round4Complete) {
   const withSorted = tiedEntrants.map(e => {
-    const lt = e.slots.map(s => s.liveTotal).filter(v => typeof v === "number").sort((a, b) => a - b);
-    const r4 = e.slots.map(s => s.r4).filter(v => typeof v === "number").sort((a, b) => a - b);
-    return { entrant: e, top5: lt.slice(0, 5), r4sorted: r4 };
+    // Same idea as orderTiedGroup -- keep golfer names paired with their scores through the sort
+    // so a deciding level (Step 1's best-5, or Step 2's Round 4 fallback) can be traced back to
+    // exactly which golfer settled it, not just a number.
+    const ltPairs = e.slots.filter(s => typeof s.liveTotal === "number")
+      .map(s => ({ v: s.liveTotal, name: s.name })).sort((a, b) => a.v - b.v);
+    const r4Pairs = e.slots.filter(s => typeof s.r4 === "number")
+      .map(s => ({ v: s.r4, name: s.name })).sort((a, b) => a.v - b.v);
+    return {
+      entrant: e,
+      top5: ltPairs.slice(0, 5).map(p => p.v),
+      top5Names: ltPairs.slice(0, 5).map(p => p.name),
+      r4sorted: r4Pairs.map(p => p.v),
+      r4sortedNames: r4Pairs.map(p => p.name),
+    };
   });
   withSorted.sort((a, b) => compareOverallEntrants(a, b, round4Complete).cmp);
   const rows = withSorted.map((w, i) => {
@@ -745,7 +799,10 @@ function orderOverallTiedGroup(tiedEntrants, round4Complete) {
       if (c.cmp !== 0) { decidingLevel = c.level; decidingStep = c.step; }
       else { splitWithPrev = true; pending = !!c.pending; }
     }
-    return { entrant: w.entrant, top5: w.top5, r4sorted: w.r4sorted, decidingLevel, decidingStep, splitWithPrev, pending };
+    return {
+      entrant: w.entrant, top5: w.top5, top5Names: w.top5Names, r4sorted: w.r4sorted, r4sortedNames: w.r4sortedNames,
+      decidingLevel, decidingStep, splitWithPrev, pending,
+    };
   });
   const clusters = [];
   for (const row of rows) {
@@ -888,30 +945,42 @@ function describeDecision(row, isOverall) {
     return "still tied through all 15";
   }
   if (isOverall && row.decidingStep === 1) {
-    return `${ordinal(row.decidingLevel)} best pick (${fmtScore(row.top5[row.decidingLevel - 1])})`;
+    const name = row.top5Names && row.top5Names[row.decidingLevel - 1];
+    return `${ordinal(row.decidingLevel)} best pick${name ? " (" + name + ")" : ""} -- shot (${fmtScore(row.top5[row.decidingLevel - 1])})`;
   }
   if (isOverall && row.decidingStep === 2) {
-    return `Round 4, ${ordinal(row.decidingLevel)} best score (${fmtScore(row.r4sorted[row.decidingLevel - 1])})`;
+    const name = row.r4sortedNames && row.r4sortedNames[row.decidingLevel - 1];
+    return `Round 4, ${ordinal(row.decidingLevel)} best score${name ? " (" + name + ")" : ""} -- shot (${fmtScore(row.r4sorted[row.decidingLevel - 1])})`;
   }
-  return `${ordinal(row.decidingLevel)} pick (${fmtScore(row.sorted[row.decidingLevel - 1])})`;
+  const name = row.sortedNames && row.sortedNames[row.decidingLevel - 1];
+  return `${ordinal(row.decidingLevel)} pick${name ? " (" + name + ")" : ""} -- shot (${fmtScore(row.sorted[row.decidingLevel - 1])})`;
 }
 
 function renderTiebreakGroup(label, g, startRank, cfg) {
   const isOverall = label === "Overall";
   const totalCount = g.entrants.length;
-  const isPendingOnly = isOverall && g.clusters.length === 1 && g.clusters[0].some(r => r.pending);
+  // Overall standings aren't final until Round 4 wraps up -- even a spot Step 1 already cleanly
+  // decided can still shift as later rounds play out, so treat the WHOLE Overall group as pending
+  // whenever Round 4 isn't done, not just the clusters still mathematically tied.
+  const round4Pending = isOverall && !(cfg && cfg.round4Complete);
+  const isPendingOnly = isOverall && (round4Pending || (g.clusters.length === 1 && g.clusters[0].some(r => r.pending)));
   const isSplitOnly = g.clusters.length === 1 && !isPendingOnly; // nobody separated at all -- everyone stays tied
   let html = `<div class="tb-group ${isSplitOnly ? "tb-split" : ""} ${isPendingOnly ? "tb-pending" : ""}">`;
-  const headerTag = isPendingOnly ? " — pending Round 4" : "";
+  const headerTag = isPendingOnly ? " — pending" : "";
   html += `<h3>${label} — ${totalCount}-way tie at rank ${startRank} (${fmtScore(g.score)})${headerTag}</h3>`;
   html += `<div class="tb-scoreline">Tied: ${g.entrants.map(e => e.fullName).join(", ")}</div>`;
   html += `<table><thead><tr><th>Finish</th><th>Entrant</th><th>Decided by</th></tr></thead><tbody>`;
   let rank = startRank;
+  let hiddenCount = 0;
   for (const cluster of g.clusters) {
-    const clusterPending = isOverall && cluster.some(r => r.pending);
+    // Overall tiebreak tracking stops at OVERALL_TIEBREAK_DISPLAY_CAP (currently 6th) -- a tie
+    // that genuinely runs past that point still exists, but there's no need to show places we'll
+    // never pay out any time soon.
+    if (isOverall && rank > OVERALL_TIEBREAK_DISPLAY_CAP) { hiddenCount += cluster.length; continue; }
+    const clusterPending = isOverall && (round4Pending || cluster.some(r => r.pending));
     const placeLabel = cluster.length > 1
       ? `${ordinal(rank)}-${ordinal(rank + cluster.length - 1)} ${clusterPending ? "(pending)" : "(split)"}`
-      : ordinal(rank);
+      : (clusterPending ? `${ordinal(rank)} (pending)` : ordinal(rank));
     for (let k = 0; k < cluster.length; k++) {
       const row = cluster[k];
       const decidedBy = k === 0 && rank === startRank ? "—" : describeDecision(row, isOverall);
@@ -921,19 +990,23 @@ function renderTiebreakGroup(label, g, startRank, cfg) {
     rank += cluster.length;
   }
   html += `</tbody></table>`;
+  if (hiddenCount > 0) {
+    html += `<div class="tb-scoreline">+${hiddenCount} more tied further back, past ${ordinal(OVERALL_TIEBREAK_DISPLAY_CAP)} place -- not shown.</div>`;
+  }
   html += renderTiebreakScorecards(g, cfg);
   const draftId = "tbdraft-" + label.replace(/\W+/g, "") + "-" + startRank;
-  const draftText = buildTiebreakWriteup(label, g, startRank);
+  const draftText = buildTiebreakWriteup(label, g, startRank, cfg);
   html += `<div class="tb-draft" id="${draftId}">${draftText}</div>`;
   html += `<button type="button" class="tb-copybtn" data-target="${draftId}">Copy draft paragraph</button>`;
   html += `</div>`;
   return html;
 }
 
-// Builds a plain-English starter paragraph in the spirit of Chip's writeups. For Daily, this is
-// just the single winner. For Overall, it walks place-by-place since multiple paid spots can be
-// tied together. Meant to be pasted into the results email and dressed up, not sent verbatim.
-function buildTiebreakWriteup(label, g, startRank) {
+// Builds a plain-English starter paragraph in the spirit of the season's results emails. For
+// Daily, this is just the single winner. For Overall, it walks place-by-place since multiple paid
+// spots can be tied together. Meant to be pasted into the results email and dressed up, not sent
+// verbatim.
+function buildTiebreakWriteup(label, g, startRank, cfg) {
   const scoreStr = fmtScore(g.score);
   const allNames = g.entrants.map(e => e.fullName);
   if (label !== "Overall") {
@@ -946,15 +1019,30 @@ function buildTiebreakWriteup(label, g, startRank) {
     const runnerUpRow = g.clusters[1] ? g.clusters[1][0] : null;
     let text = `We had a ${allNames.length}-way tie for the ${label} Daily between ${namesJoin(allNames)}, all at (${scoreStr}). `;
     if (runnerUpRow) {
-      text += `${winner.entrant.fullName} wins the tiebreaker with their ${ordinal(runnerUpRow.decidingLevel)} best player's score ` +
-        `of (${fmtScore(winner.sorted[runnerUpRow.decidingLevel - 1])}). Congrats ${winner.entrant.fullName}!`;
+      const golferName = winner.sortedNames && winner.sortedNames[runnerUpRow.decidingLevel - 1];
+      text += `${winner.entrant.fullName} wins the tiebreaker with their ${ordinal(runnerUpRow.decidingLevel)} best player's score` +
+        `${golferName ? " -- " + golferName + " shot" : " of"} (${fmtScore(winner.sorted[runnerUpRow.decidingLevel - 1])}). Congrats ${winner.entrant.fullName}!`;
     } else {
       text += `${winner.entrant.fullName} wins the tiebreaker. Congrats ${winner.entrant.fullName}!`;
     }
+    // Walk the rest of the finish order too (rank-by-rank), naming the deciding golfer and score
+    // at each step, so multi-way ties get the same level of detail as a simple 2-way tie.
+    for (let i = 2; i < g.clusters.length; i++) {
+      const priorRow = g.clusters[i - 1][0];
+      const row = g.clusters[i][0];
+      if (!row.decidingLevel) continue; // split cluster -- nothing further to separate
+      const golferName = priorRow.sortedNames && priorRow.sortedNames[row.decidingLevel - 1];
+      text += ` ${priorRow.entrant.fullName} finishes ahead of ${row.entrant.fullName} on their ${ordinal(row.decidingLevel)} best player's score` +
+        `${golferName ? " -- " + golferName + " shot" : " of"} (${fmtScore(priorRow.sorted[row.decidingLevel - 1])}).`;
+    }
     return text;
   }
-  // Overall: place-by-place breakdown
-  let text = `We have a ${allNames.length}-way tie for the Overall spot${allNames.length > 1 ? "s" : ""} starting at ${ordinal(startRank)} place, all at (${scoreStr}).\n\n`;
+  // Overall: place-by-place breakdown. While Round 4 isn't finished, EVERY placement here is
+  // provisional -- even one Step 1 has already cleanly decided -- since standings can still shift
+  // before the tournament wraps up, so every line gets a "(pending)" flag in that case.
+  const groupPending = !cfg || !cfg.round4Complete;
+  const pendingTag = groupPending ? " (pending -- not final until the tournament wraps up)" : "";
+  let text = `We have a ${allNames.length}-way tie for the Overall spot${allNames.length > 1 ? "s" : ""} starting at ${ordinal(startRank)} place, all at (${scoreStr}).${groupPending ? " Note: nothing below is final until Round 4 is complete." : ""}\n\n`;
   let rank = startRank;
   for (const cluster of g.clusters) {
     if (cluster.length > 1) {
@@ -969,11 +1057,15 @@ function buildTiebreakWriteup(label, g, startRank) {
     } else {
       const row = cluster[0];
       if (row.decidingLevel && row.decidingStep === 1) {
-        text += `${ordinal(rank)} Place goes to ${row.entrant.fullName}, deciding on their ${ordinal(row.decidingLevel)} best player's score (${fmtScore(row.top5[row.decidingLevel - 1])}).\n`;
+        const golferName = row.top5Names && row.top5Names[row.decidingLevel - 1];
+        text += `${ordinal(rank)} Place goes to ${row.entrant.fullName}, deciding on their ${ordinal(row.decidingLevel)} best player's score` +
+          `${golferName ? " -- " + golferName + " shot" : " of"} (${fmtScore(row.top5[row.decidingLevel - 1])})${pendingTag}.\n`;
       } else if (row.decidingLevel && row.decidingStep === 2) {
-        text += `${ordinal(rank)} Place goes to ${row.entrant.fullName} -- tied on the best 5, broken by Round 4's ${ordinal(row.decidingLevel)} best individual score (${fmtScore(row.r4sorted[row.decidingLevel - 1])}).\n`;
+        const golferName = row.r4sortedNames && row.r4sortedNames[row.decidingLevel - 1];
+        text += `${ordinal(rank)} Place goes to ${row.entrant.fullName} -- tied on the best 5, broken by Round 4's ${ordinal(row.decidingLevel)} best individual score` +
+          `${golferName ? " -- " + golferName + " shot" : " of"} (${fmtScore(row.r4sorted[row.decidingLevel - 1])})${pendingTag}.\n`;
       } else {
-        text += `${ordinal(rank)} Place goes to ${row.entrant.fullName}.\n`;
+        text += `${ordinal(rank)} Place goes to ${row.entrant.fullName}${pendingTag}.\n`;
       }
     }
     rank += cluster.length;
@@ -1002,20 +1094,29 @@ function renderTiebreakers(computed, scoreData) {
     }
   }
 
-  // --- Overall: ranks 1..OVERALL_PAYOUT_SPOTS, live. Step 2 of the tiebreak (Round 4 individual
-  // scores) only kicks in once Round 4 is actually complete -- before that, a tie left unresolved
-  // by Step 1 shows as "pending" rather than a false split.
+  // --- Overall: ranks 1..OVERALL_TIEBREAK_DISPLAY_CAP, live. Step 2 of the tiebreak (Round 4
+  // individual scores) only kicks in once Round 4 is actually complete -- before that, a tie left
+  // unresolved by Step 1 shows as "pending" rather than a false split. Tracked through 6th place
+  // even though only the top OVERALL_PAYOUT_SPOTS currently pay, so the report doesn't need
+  // rebuilding the day the pool grows -- but never shows 7th place or beyond.
   const round4Complete = isRoundComplete(scoreData.map, 4);
-  const overallCfg = { label: "Overall", n: 5, valuesKey: "liveTotal" };
-  const overallGroups = computeTiebreakGroups(computed, "overall", overallCfg.n, overallCfg.valuesKey, OVERALL_PAYOUT_SPOTS, true, round4Complete);
+  const overallCfg = { label: "Overall", n: 5, valuesKey: "liveTotal", round4Complete };
+  const overallGroups = computeTiebreakGroups(computed, "overall", overallCfg.n, overallCfg.valuesKey, OVERALL_TIEBREAK_DISPLAY_CAP, true, round4Complete);
+  let anyOverallTies = false;
   for (const g of overallGroups) {
     anyTies = true;
+    anyOverallTies = true;
     html += renderTiebreakGroup("Overall", g, g.rank, overallCfg);
   }
 
   if (!anyTies) {
-    html = `<div class="tb-none">No payout-relevant ties right now (Daily winner spot, or Overall places 1-${OVERALL_PAYOUT_SPOTS}). ` +
+    html = `<div class="tb-none">No payout-relevant ties right now (Daily winner spot, or Overall places 1-${OVERALL_TIEBREAK_DISPLAY_CAP}). ` +
       `This report updates automatically -- Daily ties populate once that round is final; Overall updates live.</div>`;
+  }
+  if (anyOverallTies && !round4Complete) {
+    html = `<div class="tb-provisional">⚠ Overall standings are still in progress -- these tiebreak positions are provisional and can ` +
+      `change as later rounds are completed. Final results won't be locked in until the tournament wraps up ` +
+      `(typically Sunday evening / Monday morning).</div>` + html;
   }
   box.innerHTML = html;
   box.querySelectorAll(".tb-copybtn").forEach(btn => {
@@ -1042,6 +1143,7 @@ async function refreshAll() {
     clearError();
     const entrantsRaw = selectEntrants(submissions, scoreData.lockTime);
     const computed = entrantsRaw.map(e => computeEntrant(e, scoreData.map));
+    attachRanks(computed);
 
     renderDayTable("tbl-overall", rankWithTies(computed, "overall"), "overall", "Overall");
     renderDayTable("tbl-day1", rankWithTies(computed, "day1"), "day1", "Day 1");

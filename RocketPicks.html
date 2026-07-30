@@ -8,6 +8,7 @@
   :root{
     --green:#155724; --green-dark:#0d3a19; --gold:#c9a227; --bg:#f4f6f4;
     --card:#ffffff; --border:#d7ddd7; --red:#b3261e; --text:#1b1f1b;
+    --lightgreen:#e6f4ea; --lightgold:#fdf3d0; --lightred:#fbeaea;
   }
   *{box-sizing:border-box;}
   body{
@@ -37,6 +38,10 @@
   .altrow label{color:var(--red);}
   .groupmeta{font-size:.8rem; color:#556; margin-bottom:10px;}
   .err{color:var(--red); font-size:.85rem; margin-top:6px; display:none;}
+  .roster-msg{
+    background:var(--lightgold, #fdf3d0); border:1px solid var(--gold); border-radius:6px;
+    padding:8px 10px; font-size:.82rem; color:#7a6420; margin-top:8px; line-height:1.4;
+  }
   .actions{position:sticky; bottom:0; background:var(--bg); padding:16px 0 4px;}
   button{
     width:100%; padding:14px; font-size:1.05rem; font-weight:700; border:none;
@@ -79,6 +84,52 @@
   .gateCard button{background:var(--green); color:#fff;}
   .gateErr{color:var(--red); font-size:.85rem; min-height:18px; margin-bottom:6px;}
   #mainContent{display:none;}
+  /* ---- tabs (shared pattern with the Leaderboard page) ---- */
+  .tabs{display:flex; gap:6px; flex-wrap:wrap; margin:0 0 16px; justify-content:center;}
+  .tab{
+    background:#fff; border:1px solid var(--border); color:#556; padding:8px 16px;
+    border-radius:20px; font-size:.85rem; font-weight:600; cursor:pointer;
+  }
+  .tab.active{background:var(--green); border-color:var(--green); color:#fff;}
+  .panel{display:none;}
+  .panel.active{display:block;}
+  /* ---- group rosters tab ---- */
+  .pickcount{font-weight:400; font-size:.85rem; color:#556;}
+  ol.plist{list-style:none; margin:0; padding:0; columns:2; column-gap:24px;}
+  ol.plist li{break-inside:avoid; padding:5px 0; font-size:.92rem; border-bottom:1px solid #eef1ee;}
+  .num{color:#8a978a; font-size:.8rem; margin-right:4px;}
+  .wgr{float:right; font-size:.75rem; color:#8a7420; background:#fdf6e0; padding:1px 6px; border-radius:4px;}
+  @media (max-width:480px){ ol.plist{columns:1;} }
+  /* ---- who's submitted tab ---- */
+  .statusbar{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; flex-wrap:wrap;}
+  .statusbar span{font-size:.8rem; color:#667;}
+  .statusbar button{
+    width:auto; background:#fff; border:1px solid var(--border); color:var(--green-dark);
+    padding:6px 12px; border-radius:6px; font-size:.8rem; font-weight:600; margin-bottom:0;
+  }
+  .statusbar button:hover{background:var(--lightgreen);}
+  .delaynote{
+    background:var(--lightgold); border:1px solid var(--gold); border-radius:8px;
+    padding:10px 14px; font-size:.82rem; color:#5a4a10; margin-bottom:14px; line-height:1.5;
+  }
+  #dataError{
+    display:none; background:var(--lightred); color:var(--red); border:1px solid #f0c9c6;
+    padding:10px 14px; border-radius:6px; font-size:.85rem; margin:10px 0; text-align:left;
+    white-space:pre-wrap;
+  }
+  table{width:100%; border-collapse:collapse; font-size:.85rem;}
+  th,td{padding:8px 10px; text-align:left; border-bottom:1px solid var(--border);}
+  th{
+    background:var(--green); color:#fff; font-size:.75rem; text-transform:uppercase;
+    letter-spacing:.03em;
+  }
+  tr:nth-child(even) td{background:#fafbfa;}
+  .me-hint{background:var(--lightgreen) !important;}
+  .searchbox{
+    width:100%; max-width:320px; padding:8px 10px; border:1px solid var(--border);
+    border-radius:6px; font-size:.9rem; margin:0 auto 14px; display:block;
+  }
+  .submitted-none{text-align:center; color:#889; font-size:.85rem; padding:20px 0;}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -104,9 +155,14 @@
 
 <div class="wrap">
 
-  <div style="text-align:center; margin-bottom:16px;">
-    <a href="RocketGroups.html" style="color:#155724; font-weight:600; font-size:.95rem; text-decoration:none;">📋 View full group rosters &rarr;</a>
+  <div class="tabs" id="tabs">
+    <div class="tab active" data-panel="picks">Make Your Picks</div>
+    <div class="tab" data-panel="rosters">Group Rosters</div>
+    <div class="tab" data-panel="submitted">Who's Submitted</div>
   </div>
+
+  <!-- ====================== PANEL: Make Your Picks ====================== -->
+  <div class="panel active" id="panel-picks">
 
   <div class="card">
     <h2>Your Info</h2>
@@ -115,9 +171,12 @@
     <label for="lastName">Last Name</label>
     <input type="text" id="lastName" placeholder="e.g. Neher" autocomplete="family-name">
     <div class="err" id="nameErr">Please enter your first and last name.</div>
-    <label for="aliasName">Nickname / Alias <span style="font-weight:400; color:#889;">(optional — only if you go by something else)</span></label>
-    <input type="text" id="aliasName" placeholder="e.g. Jay" autocomplete="off">
-    <p class="note">Pick from each of the 5 groups below (5 from Group A, 4 from Group B, 3 from Group C, 2 from Group D, 1 from Group E — 15 total), plus 1 alternate per group. The alternate only comes into play if one of your picks in that group withdraws before or during Round 1 or 2. No duplicate golfers across your whole team.</p>
+    <div class="roster-msg" id="rosterMsg" style="display:none;"></div>
+    <label id="newEntrantLabel" style="display:none; margin-top:6px; font-weight:400;">
+      <input type="checkbox" id="newEntrantCheck" style="width:auto; display:inline-block; margin-right:6px; vertical-align:middle;">
+      <span>I'm not on this list — I'm new to the pool this season</span>
+    </label>
+    <p class="note">Pick from each of the 5 groups below (5 from Group A, 4 from Group B, 3 from Group C, 2 from Group D, 1 from Group E — 15 total), plus 1 alternate per group. The alternate only comes into play if one of your picks in that group withdraws before or during Round 1 or 2. No duplicate golfers across your whole team. Not sure who's in each group? Check the <a href="#" data-goto-panel="rosters" style="color:var(--green-dark); font-weight:600;">Group Rosters</a> tab above.</p>
   </div>
 
   <div id="groupsContainer"></div>
@@ -140,7 +199,7 @@
         <button class="secondary" id="emailBtn" type="button">📧 Email My Picks</button>
         <button class="secondary" id="copyBtn" type="button">📋 Copy Data Row</button>
       </div>
-      <p class="note" style="text-align:center; margin-top:2px;">"Submit My Picks" sends your picks automatically — no email needed. Use Email or Copy as a backup if it fails.</p>
+      <p class="note" style="text-align:center; margin-top:2px;">"Submit My Picks" sends your picks automatically — no email needed. Use Email or Copy as a backup if it fails. After submitting, check the <a href="#" data-goto-panel="submitted" style="color:var(--green-dark); font-weight:600;">Who's Submitted</a> tab in a few minutes to confirm you're on the list.</p>
       <div id="saveRecordSection" style="display:none; margin-top:14px; padding-top:14px; border-top:1px dashed var(--border);">
         <p class="note" style="text-align:center; margin-bottom:8px;">Want a copy for yourself? Save a record of your picks below.</p>
         <div class="flex-btns">
@@ -150,6 +209,62 @@
       </div>
     </div>
   </div>
+
+  </div><!-- /panel-picks -->
+
+  <!-- ====================== PANEL: Group Rosters ====================== -->
+  <div class="panel" id="panel-rosters">
+    <div class="card">
+      <h2>Group A <span class="pickcount">— pick 5</span></h2>
+      <div class="groupmeta">25 players in this group, listed best to worst by World Golf Ranking.</div>
+      <ol class="plist">
+        <li><span class="num">1.</span> <span class="pname">Cameron Young</span><span class="wgr">WGR 3</span></li><li><span class="num">2.</span> <span class="pname">Russell Henley</span><span class="wgr">WGR 5</span></li><li><span class="num">3.</span> <span class="pname">Wyndham Clark</span><span class="wgr">WGR 8</span></li><li><span class="num">4.</span> <span class="pname">Xander Schauffele</span><span class="wgr">WGR 11</span></li><li><span class="num">5.</span> <span class="pname">J.J. Spaun</span><span class="wgr">WGR 12</span></li><li><span class="num">6.</span> <span class="pname">Chris Gotterup</span><span class="wgr">WGR 13</span></li><li><span class="num">7.</span> <span class="pname">Ben Griffin</span><span class="wgr">WGR 18</span></li><li><span class="num">8.</span> <span class="pname">Si Woo Kim</span><span class="wgr">WGR 21</span></li><li><span class="num">9.</span> <span class="pname">Harris English</span><span class="wgr">WGR 24</span></li><li><span class="num">10.</span> <span class="pname">Jacob Bridgeman</span><span class="wgr">WGR 25</span></li><li><span class="num">11.</span> <span class="pname">Ryan Gerard</span><span class="wgr">WGR 27</span></li><li><span class="num">12.</span> <span class="pname">Hideki Matsuyama</span><span class="wgr">WGR 28</span></li><li><span class="num">13.</span> <span class="pname">Akshay Bhatia</span><span class="wgr">WGR 31</span></li><li><span class="num">14.</span> <span class="pname">Nicolai Højgaard</span><span class="wgr">WGR 35</span></li><li><span class="num">15.</span> <span class="pname">Maverick McNealy</span><span class="wgr">WGR 36</span></li><li><span class="num">16.</span> <span class="pname">Patrick Cantlay</span><span class="wgr">WGR 37</span></li><li><span class="num">17.</span> <span class="pname">Keegan Bradley</span><span class="wgr">WGR 38</span></li><li><span class="num">18.</span> <span class="pname">Rickie Fowler</span><span class="wgr">WGR 42</span></li><li><span class="num">19.</span> <span class="pname">Jake Knapp</span><span class="wgr">WGR 44</span></li><li><span class="num">20.</span> <span class="pname">Sam Stevens</span><span class="wgr">WGR 46</span></li><li><span class="num">21.</span> <span class="pname">Jason Day</span><span class="wgr">WGR 47</span></li><li><span class="num">22.</span> <span class="pname">Marco Penge</span><span class="wgr">WGR 48</span></li><li><span class="num">23.</span> <span class="pname">Jordan Spieth</span><span class="wgr">WGR 49</span></li><li><span class="num">24.</span> <span class="pname">Michael Kim</span><span class="wgr">WGR 51</span></li><li><span class="num">25.</span> <span class="pname">Nico Echavarria</span><span class="wgr">WGR 53</span></li>
+      </ol>
+    </div>
+    <div class="card">
+      <h2>Group B <span class="pickcount">— pick 4</span></h2>
+      <div class="groupmeta">25 players in this group, listed best to worst by World Golf Ranking.</div>
+      <ol class="plist">
+        <li><span class="num">1.</span> <span class="pname">Corey Conners</span><span class="wgr">WGR 55</span></li><li><span class="num">2.</span> <span class="pname">Matt McCarty</span><span class="wgr">WGR 56</span></li><li><span class="num">3.</span> <span class="pname">Pierceson Coody</span><span class="wgr">WGR 57</span></li><li><span class="num">4.</span> <span class="pname">Michael Brennan</span><span class="wgr">WGR 59</span></li><li><span class="num">5.</span> <span class="pname">Ryo Hisatsune</span><span class="wgr">WGR 62</span></li><li><span class="num">6.</span> <span class="pname">Andrew Novak</span><span class="wgr">WGR 63</span></li><li><span class="num">7.</span> <span class="pname">Nick Taylor</span><span class="wgr">WGR 65</span></li><li><span class="num">8.</span> <span class="pname">Eric Cole</span><span class="wgr">WGR 66</span></li><li><span class="num">9.</span> <span class="pname">Harry Hall</span><span class="wgr">WGR 70</span></li><li><span class="num">10.</span> <span class="pname">Max Greyserman</span><span class="wgr">WGR 71</span></li><li><span class="num">11.</span> <span class="pname">Aldrich Potgieter</span><span class="wgr">WGR 74</span></li><li><span class="num">12.</span> <span class="pname">Johnny Keefer</span><span class="wgr">WGR 75</span></li><li><span class="num">13.</span> <span class="pname">Matti Schmid</span><span class="wgr">WGR 77</span></li><li><span class="num">14.</span> <span class="pname">Jordan Smith</span><span class="wgr">WGR 78</span></li><li><span class="num">15.</span> <span class="pname">Sungjae Im</span><span class="wgr">WGR 79</span></li><li><span class="num">16.</span> <span class="pname">Michael Thorbjornsen</span><span class="wgr">WGR 80</span></li><li><span class="num">17.</span> <span class="pname">Rasmus Højgaard</span><span class="wgr">WGR 81</span></li><li><span class="num">18.</span> <span class="pname">Matt Wallace</span><span class="wgr">WGR 83</span></li><li><span class="num">19.</span> <span class="pname">Patrick Rodgers</span><span class="wgr">WGR 84</span></li><li><span class="num">20.</span> <span class="pname">John Parry</span><span class="wgr">WGR 85</span></li><li><span class="num">21.</span> <span class="pname">Rasmus Neergaard-Petersen</span><span class="wgr">WGR 86</span></li><li><span class="num">22.</span> <span class="pname">Andrew Putnam</span><span class="wgr">WGR 88</span></li><li><span class="num">23.</span> <span class="pname">Mac Meissner</span><span class="wgr">WGR 90</span></li><li><span class="num">24.</span> <span class="pname">Rico Hoey</span><span class="wgr">WGR 92</span></li><li><span class="num">25.</span> <span class="pname">Taylor Pendrith</span><span class="wgr">WGR 93</span></li>
+      </ol>
+    </div>
+    <div class="card">
+      <h2>Group C <span class="pickcount">— pick 3</span></h2>
+      <div class="groupmeta">30 players in this group, listed best to worst by World Golf Ranking.</div>
+      <ol class="plist">
+        <li><span class="num">1.</span> <span class="pname">Max McGreevy</span><span class="wgr">WGR 94</span></li><li><span class="num">2.</span> <span class="pname">Haotong Li</span><span class="wgr">WGR 95</span></li><li><span class="num">3.</span> <span class="pname">Ricky Castillo</span><span class="wgr">WGR 96</span></li><li><span class="num">4.</span> <span class="pname">Christiaan Bezuidenhout</span><span class="wgr">WGR 98</span></li><li><span class="num">5.</span> <span class="pname">Stephan Jaeger</span><span class="wgr">WGR 99</span></li><li><span class="num">6.</span> <span class="pname">Sudarshan Yellamaraju</span><span class="wgr">WGR 100</span></li><li><span class="num">7.</span> <span class="pname">Austin Smotherman</span><span class="wgr">WGR 101</span></li><li><span class="num">8.</span> <span class="pname">Garrick Higgo</span><span class="wgr">WGR 102</span></li><li><span class="num">9.</span> <span class="pname">Denny McCarthy</span><span class="wgr">WGR 103</span></li><li><span class="num">10.</span> <span class="pname">David Lipsky</span><span class="wgr">WGR 106</span></li><li><span class="num">11.</span> <span class="pname">Emiliano Grillo</span><span class="wgr">WGR 107</span></li><li><span class="num">12.</span> <span class="pname">Chris Kirk</span><span class="wgr">WGR 108</span></li><li><span class="num">13.</span> <span class="pname">Lucas Glover</span><span class="wgr">WGR 109</span></li><li><span class="num">14.</span> <span class="pname">Tony Finau</span><span class="wgr">WGR 110</span></li><li><span class="num">15.</span> <span class="pname">Tom Hoge</span><span class="wgr">WGR 112</span></li><li><span class="num">16.</span> <span class="pname">Brooks Koepka</span><span class="wgr">WGR 113</span></li><li><span class="num">17.</span> <span class="pname">Chandler Blanchet</span><span class="wgr">WGR 115</span></li><li><span class="num">18.</span> <span class="pname">Adrien Saddier</span><span class="wgr">WGR 117</span></li><li><span class="num">19.</span> <span class="pname">Daniel Brown</span><span class="wgr">WGR 119</span></li><li><span class="num">20.</span> <span class="pname">Steven Fisk</span><span class="wgr">WGR 120</span></li><li><span class="num">21.</span> <span class="pname">Brandt Snedeker</span><span class="wgr">WGR 121</span></li><li><span class="num">22.</span> <span class="pname">Mark Hubbard</span><span class="wgr">WGR 122</span></li><li><span class="num">23.</span> <span class="pname">Kevin Yu</span><span class="wgr">WGR 125</span></li><li><span class="num">24.</span> <span class="pname">Brian Campbell</span><span class="wgr">WGR 127</span></li><li><span class="num">25.</span> <span class="pname">William Mouw</span><span class="wgr">WGR 129</span></li><li><span class="num">26.</span> <span class="pname">Jackson Suber</span><span class="wgr">WGR 130</span></li><li><span class="num">27.</span> <span class="pname">Thorbjørn Olesen</span><span class="wgr">WGR 133</span></li><li><span class="num">28.</span> <span class="pname">Cam Davis</span></li><li><span class="num">29.</span> <span class="pname">Keita Nakajima</span><span class="wgr">WGR 136</span></li><li><span class="num">30.</span> <span class="pname">Mackenzie Hughes</span><span class="wgr">WGR 139</span></li>
+      </ol>
+    </div>
+    <div class="card">
+      <h2>Group D <span class="pickcount">— pick 2</span></h2>
+      <div class="groupmeta">30 players in this group, listed best to worst by World Golf Ranking.</div>
+      <ol class="plist">
+        <li><span class="num">1.</span> <span class="pname">Taylor Moore</span><span class="wgr">WGR 140</span></li><li><span class="num">2.</span> <span class="pname">Billy Horschel</span><span class="wgr">WGR 142</span></li><li><span class="num">3.</span> <span class="pname">Davis Thompson</span><span class="wgr">WGR 148</span></li><li><span class="num">4.</span> <span class="pname">Takumi Kanaya</span><span class="wgr">WGR 152</span></li><li><span class="num">5.</span> <span class="pname">Lee Hodges</span><span class="wgr">WGR 157</span></li><li><span class="num">6.</span> <span class="pname">Zach Bauchou</span><span class="wgr">WGR 158</span></li><li><span class="num">7.</span> <span class="pname">Beau Hossler</span><span class="wgr">WGR 159</span></li><li><span class="num">8.</span> <span class="pname">Jesper Svensson</span><span class="wgr">WGR 160</span></li><li><span class="num">9.</span> <span class="pname">Vince Whaley</span><span class="wgr">WGR 162</span></li><li><span class="num">10.</span> <span class="pname">Adrien Dumont de Chassart</span><span class="wgr">WGR 163</span></li><li><span class="num">11.</span> <span class="pname">Davis Riley</span><span class="wgr">WGR 167</span></li><li><span class="num">12.</span> <span class="pname">Adam Schenk</span><span class="wgr">WGR 169</span></li><li><span class="num">13.</span> <span class="pname">Chad Ramey</span><span class="wgr">WGR 170</span></li><li><span class="num">14.</span> <span class="pname">Chandler Phillips</span><span class="wgr">WGR 172</span></li><li><span class="num">15.</span> <span class="pname">Joe Highsmith</span><span class="wgr">WGR 174</span></li><li><span class="num">16.</span> <span class="pname">Austin Eckroat</span><span class="wgr">WGR 176</span></li><li><span class="num">17.</span> <span class="pname">Doug Ghim</span><span class="wgr">WGR 177</span></li><li><span class="num">18.</span> <span class="pname">Matt Kuchar</span><span class="wgr">WGR 179</span></li><li><span class="num">19.</span> <span class="pname">Erik van Rooyen</span><span class="wgr">WGR 181</span></li><li><span class="num">20.</span> <span class="pname">A.J. Ewart</span><span class="wgr">WGR 184</span></li><li><span class="num">21.</span> <span class="pname">Neal Shipley</span><span class="wgr">WGR 190</span></li><li><span class="num">22.</span> <span class="pname">Zecheng Dou</span><span class="wgr">WGR 191</span></li><li><span class="num">23.</span> <span class="pname">Séamus Power</span><span class="wgr">WGR 195</span></li><li><span class="num">24.</span> <span class="pname">Karl Vilips</span><span class="wgr">WGR 196</span></li><li><span class="num">25.</span> <span class="pname">Aaron Wise</span></li><li><span class="num">26.</span> <span class="pname">Adam Svensson</span></li><li><span class="num">27.</span> <span class="pname">Alejandro Tosti</span></li><li><span class="num">28.</span> <span class="pname">Ben James</span></li><li><span class="num">29.</span> <span class="pname">Brad Dalke</span></li><li><span class="num">30.</span> <span class="pname">Brendon Todd</span></li>
+      </ol>
+    </div>
+    <div class="card">
+      <h2>Group E <span class="pickcount">— pick 1</span></h2>
+      <div class="groupmeta">31 players in this group, listed best to worst by World Golf Ranking.</div>
+      <ol class="plist">
+        <li><span class="num">1.</span> <span class="pname">Brice Garnett</span></li><li><span class="num">2.</span> <span class="pname">Kevin Roy</span><span class="wgr">WGR 134</span></li><li><span class="num">3.</span> <span class="pname">Christo Lamprecht</span></li><li><span class="num">4.</span> <span class="pname">Danny Walker</span></li><li><span class="num">5.</span> <span class="pname">Davis Chatfield</span></li><li><span class="num">6.</span> <span class="pname">Dylan Wu</span></li><li><span class="num">7.</span> <span class="pname">Gordon Sargent</span></li><li><span class="num">8.</span> <span class="pname">Hank Lebioda</span></li><li><span class="num">9.</span> <span class="pname">Jackson Koivun</span></li><li><span class="num">10.</span> <span class="pname">Jeffrey Kang</span></li><li><span class="num">11.</span> <span class="pname">Joe Hooks</span></li><li><span class="num">12.</span> <span class="pname">Joel Dahmen</span></li><li><span class="num">13.</span> <span class="pname">John VanDerLaan</span></li><li><span class="num">14.</span> <span class="pname">Kensei Hirata</span></li><li><span class="num">15.</span> <span class="pname">Kevin Streelman</span></li><li><span class="num">16.</span> <span class="pname">Kristoffer Ventura</span></li><li><span class="num">17.</span> <span class="pname">Luke Clanton</span></li><li><span class="num">18.</span> <span class="pname">Marcelo Rozo</span></li><li><span class="num">19.</span> <span class="pname">Matthieu Pavon</span></li><li><span class="num">20.</span> <span class="pname">Nick Dunlap</span></li><li><span class="num">21.</span> <span class="pname">Patrick Fishburn</span></li><li><span class="num">22.</span> <span class="pname">Patrick Wilkes-Krier</span></li><li><span class="num">23.</span> <span class="pname">Patton Kizzire</span></li><li><span class="num">24.</span> <span class="pname">Peter Malnati</span></li><li><span class="num">25.</span> <span class="pname">Pontus Nyholm</span></li><li><span class="num">26.</span> <span class="pname">Rafael Campos</span></li><li><span class="num">27.</span> <span class="pname">Ryan Ruffels</span></li><li><span class="num">28.</span> <span class="pname">Stefano Mazzoli</span></li><li><span class="num">29.</span> <span class="pname">Trace Crowe</span></li><li><span class="num">30.</span> <span class="pname">Webb Simpson</span></li><li><span class="num">31.</span> <span class="pname">William Jennings</span></li>
+      </ol>
+    </div>
+  </div><!-- /panel-rosters -->
+
+  <!-- ====================== PANEL: Who's Submitted ====================== -->
+  <div class="panel" id="panel-submitted">
+    <div class="delaynote">⏱ There's usually a short delay (a few minutes) between hitting "Submit My Picks" and your name showing up here — the sheet has to catch up. If you don't see yourself right away, wait about <strong>5 minutes</strong> and hit refresh before assuming something went wrong.</div>
+    <div class="statusbar">
+      <span id="submittedUpdated">Loading…</span>
+      <button id="submittedRefreshBtn" type="button">↻ Refresh now</button>
+    </div>
+    <div id="submittedError"></div>
+    <input type="text" class="searchbox" id="submittedSearch" placeholder="Search your name…">
+    <div class="card">
+      <table id="tbl-submitted"><thead><tr><th>Entrant</th><th>Last Submitted</th></tr></thead><tbody></tbody></table>
+      <div class="submitted-none" id="submittedNone" style="display:none;">No submissions yet.</div>
+    </div>
+  </div><!-- /panel-submitted -->
 
 </div>
 </div><!-- /mainContent -->
@@ -168,7 +283,7 @@
 
 <script>
 /* ====================== CONFIG — edit this each tournament ====================== */
-const TOURNAMENT_NAME = "Rocket Classic (TEST) \u2014 Detroit Golf Club";
+const TOURNAMENT_NAME = "Rocket Classic (TEST) — Detroit Golf Club";
 const SEND_TO_EMAIL = "jeff.neher@gmail.com"; // change to whoever collects picks (e.g. Chip Brunt)
 const ENTRY_PASSWORD = "Detroit2026"; // change this each tournament and share it with entrants only
 const GROUP_PICKS = {"Group A": 5, "Group B": 4, "Group C": 3, "Group D": 2, "Group E": 1}; // picks per group (15 total)
@@ -176,6 +291,31 @@ const SUBMIT_URL = "https://script.google.com/macros/s/AKfycbxJp18dq8iLJzVAd-27e
 const SUBMIT_SECRET = "Majors2026"; // must exactly match SHARED_SECRET in the Apps Script — same all year
 const TOURNAMENT_ID = "Rocket Classic (TEST)"; // becomes this tournament's tab name in the year's Google Sheet
 const COURSE_INFO = "147 golfers in the field · Par 70 · 7,328 yards"; // field size + par, shown under the header — update each tournament (source: PGA Tour / tournament site)
+// Publish-to-web TSV link for this tournament's Picks tab -- same sheet/gid the Leaderboard page
+// reads, used here only to show who has submitted so far (read-only, no scoring happens on this page).
+const PICKS_TSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vScRxv9AHrLvuftk8SFvhqdsQaENzrTydEgKbG7ow_ii56TNm7uKcJoO9maExpeERnsBCY5xzzvibdS/pub?gid=14865622&single=true&output=tsv";
+const SUBMITTED_REFRESH_MS = 90 * 1000; // how often the Who's Submitted tab auto re-pulls
+// This season's approved entrant roster, "First Last" -- used only to catch typos when someone
+// submits picks (e.g. misspelled last name). Pulled from Workbook A's Entrants tab -- update this
+// list there first, then copy it over here each time the roster changes. Leave it empty to skip
+// the check entirely (nobody gets blocked while it's empty).
+const APPROVED_ENTRANTS = [
+  "Chip Brunt", "Jeff Neher", "Ron Brunt", "Sandy Brunt",
+  "Scott Brunt", "Chris Starrs", "David White", "Jay Warrick",
+  "Ken Warrick", "Tim Bourff", "Mike Gervasini", "Chris Lalonde",
+  "Mike Lalonde", "Randy Smith", "Sandy Smith", "Bubba Stehmeier",
+  "Lynne Lewis", "Brad Harman", "Tom Harmam", "Rob Bouton",
+  "Chad Carmichael", "Erick Banks", "Mike Orzel", "Jim Boudreau",
+  "Bob Alger", "Paul Kiker", "Sam Trawick", "John Vernocy",
+  "Marian Vernocy", "Seth Holloman", "Kevin Smallwood", "Eddie Stedem",
+  "Rick Turner", "John Dicristo", "Jim Stout", "John Platko",
+  "Richard Sorrow", "Jon Hayward", "Tim Radley", "Roger Kollat",
+  "Dalton Haven", "Gene Afusia", "Chris Jacovettie", "Larry Dukes",
+  "Shelton Collier", "Cullen Cameron", "Shane Hunt", "Greg Mangum",
+  "Tyler Mayrosh", "Dennis Dingler", "Laura Neher", "Brent Coffee",
+  "Geoff Cavender", "Barry Myers", "Jeff Zimmerman", "Bill Moertel",
+  "Dan Judge", "Jason Phillips",
+];
 const GROUPS = {"Group A": ["Cameron Young", "Russell Henley", "Wyndham Clark", "Xander Schauffele", "J.J. Spaun", "Chris Gotterup", "Ben Griffin", "Si Woo Kim", "Harris English", "Jacob Bridgeman", "Ryan Gerard", "Hideki Matsuyama", "Akshay Bhatia", "Nicolai Højgaard", "Maverick McNealy", "Patrick Cantlay", "Keegan Bradley", "Rickie Fowler", "Jake Knapp", "Sam Stevens", "Jason Day", "Marco Penge", "Jordan Spieth", "Michael Kim", "Nico Echavarria"], "Group B": ["Corey Conners", "Matt McCarty", "Pierceson Coody", "Michael Brennan", "Ryo Hisatsune", "Andrew Novak", "Nick Taylor", "Eric Cole", "Harry Hall", "Max Greyserman", "Aldrich Potgieter", "Johnny Keefer", "Matti Schmid", "Jordan Smith", "Sungjae Im", "Michael Thorbjornsen", "Rasmus Højgaard", "Matt Wallace", "Patrick Rodgers", "John Parry", "Rasmus Neergaard-Petersen", "Andrew Putnam", "Mac Meissner", "Rico Hoey", "Taylor Pendrith"], "Group C": ["Max McGreevy", "Haotong Li", "Ricky Castillo", "Christiaan Bezuidenhout", "Stephan Jaeger", "Sudarshan Yellamaraju", "Austin Smotherman", "Garrick Higgo", "Denny McCarthy", "David Lipsky", "Emiliano Grillo", "Chris Kirk", "Lucas Glover", "Tony Finau", "Tom Hoge", "Brooks Koepka", "Chandler Blanchet", "Adrien Saddier", "Daniel Brown", "Steven Fisk", "Brandt Snedeker", "Mark Hubbard", "Kevin Yu", "Brian Campbell", "William Mouw", "Jackson Suber", "Thorbjørn Olesen", "Cam Davis", "Keita Nakajima", "Mackenzie Hughes"], "Group D": ["Taylor Moore", "Billy Horschel", "Davis Thompson", "Takumi Kanaya", "Lee Hodges", "Zach Bauchou", "Beau Hossler", "Jesper Svensson", "Vince Whaley", "Adrien Dumont de Chassart", "Davis Riley", "Adam Schenk", "Chad Ramey", "Chandler Phillips", "Joe Highsmith", "Austin Eckroat", "Doug Ghim", "Matt Kuchar", "Erik van Rooyen", "A.J. Ewart", "Neal Shipley", "Zecheng Dou", "Séamus Power", "Karl Vilips", "Aaron Wise", "Adam Svensson", "Alejandro Tosti", "Ben James", "Brad Dalke", "Brendon Todd"], "Group E": ["Brice Garnett", "Kevin Roy", "Christo Lamprecht", "Danny Walker", "Davis Chatfield", "Dylan Wu", "Gordon Sargent", "Hank Lebioda", "Jackson Koivun", "Jeffrey Kang", "Joe Hooks", "Joel Dahmen", "John VanDerLaan", "Kensei Hirata", "Kevin Streelman", "Kristoffer Ventura", "Luke Clanton", "Marcelo Rozo", "Matthieu Pavon", "Nick Dunlap", "Patrick Fishburn", "Patrick Wilkes-Krier", "Patton Kizzire", "Peter Malnati", "Pontus Nyholm", "Rafael Campos", "Ryan Ruffels", "Stefano Mazzoli", "Trace Crowe", "Webb Simpson", "William Jennings"]};
 const WGR_RANKS = {"Cameron Young": 3, "Russell Henley": 5, "Wyndham Clark": 8, "Xander Schauffele": 11, "J.J. Spaun": 12, "Chris Gotterup": 13, "Ben Griffin": 18, "Si Woo Kim": 21, "Harris English": 24, "Jacob Bridgeman": 25, "Ryan Gerard": 27, "Hideki Matsuyama": 28, "Akshay Bhatia": 31, "Nicolai Højgaard": 35, "Maverick McNealy": 36, "Patrick Cantlay": 37, "Keegan Bradley": 38, "Rickie Fowler": 42, "Jake Knapp": 44, "Sam Stevens": 46, "Jason Day": 47, "Marco Penge": 48, "Jordan Spieth": 49, "Michael Kim": 51, "Nico Echavarria": 53, "Corey Conners": 55, "Matt McCarty": 56, "Pierceson Coody": 57, "Michael Brennan": 59, "Ryo Hisatsune": 62, "Andrew Novak": 63, "Nick Taylor": 65, "Eric Cole": 66, "Harry Hall": 70, "Max Greyserman": 71, "Aldrich Potgieter": 74, "Johnny Keefer": 75, "Matti Schmid": 77, "Jordan Smith": 78, "Sungjae Im": 79, "Michael Thorbjornsen": 80, "Rasmus Højgaard": 81, "Matt Wallace": 83, "Patrick Rodgers": 84, "John Parry": 85, "Rasmus Neergaard-Petersen": 86, "Andrew Putnam": 88, "Mac Meissner": 90, "Rico Hoey": 92, "Taylor Pendrith": 93, "Max McGreevy": 94, "Haotong Li": 95, "Ricky Castillo": 96, "Christiaan Bezuidenhout": 98, "Stephan Jaeger": 99, "Sudarshan Yellamaraju": 100, "Austin Smotherman": 101, "Garrick Higgo": 102, "Denny McCarthy": 103, "David Lipsky": 106, "Emiliano Grillo": 107, "Chris Kirk": 108, "Lucas Glover": 109, "Tony Finau": 110, "Tom Hoge": 112, "Brooks Koepka": 113, "Chandler Blanchet": 115, "Adrien Saddier": 117, "Daniel Brown": 119, "Steven Fisk": 120, "Brandt Snedeker": 121, "Mark Hubbard": 122, "Kevin Yu": 125, "Brian Campbell": 127, "William Mouw": 129, "Jackson Suber": 130, "Thorbjørn Olesen": 133, "Keita Nakajima": 136, "Mackenzie Hughes": 139, "Taylor Moore": 140, "Billy Horschel": 142, "Davis Thompson": 148, "Takumi Kanaya": 152, "Lee Hodges": 157, "Zach Bauchou": 158, "Beau Hossler": 159, "Jesper Svensson": 160, "Vince Whaley": 162, "Adrien Dumont de Chassart": 163, "Davis Riley": 167, "Adam Schenk": 169, "Chad Ramey": 170, "Chandler Phillips": 172, "Joe Highsmith": 174, "Austin Eckroat": 176, "Doug Ghim": 177, "Matt Kuchar": 179, "Erik van Rooyen": 181, "A.J. Ewart": 184, "Neal Shipley": 190, "Zecheng Dou": 191, "Séamus Power": 195, "Karl Vilips": 196, "Kevin Roy": 134}; // World Golf Ranking, for display only — never used as the stored value
 /* =================================================================================== */
@@ -216,6 +356,25 @@ try {
     document.getElementById('mainContent').style.display = 'block';
   }
 } catch (e) { /* ignore — same in-app-browser restriction as above */ }
+
+/* ====================== tabs ====================== */
+function activatePanel(panelKey) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.panel === panelKey));
+  document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + panelKey));
+}
+document.getElementById('tabs').addEventListener('click', (e) => {
+  const tab = e.target.closest('.tab');
+  if (!tab) return;
+  activatePanel(tab.dataset.panel);
+});
+// In-page links that jump straight to a tab (e.g. "check the Group Rosters tab").
+document.querySelectorAll('[data-goto-panel]').forEach(link => {
+  link.addEventListener('click', (e) => {
+    e.preventDefault();
+    activatePanel(link.dataset.gotoPanel);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+});
 
 /* ---- everything else (building the pick form) runs after the gate is already wired
    up, and is wrapped so a failure here shows a visible error instead of silently
@@ -295,14 +454,53 @@ if (new URLSearchParams(window.location.search).get('autofill') === 'jeff') {
       });
     });
   });
-  document.querySelector('.wrap').insertBefore(fillBtn, document.getElementById('groupsContainer'));
+  document.querySelector('#panel-picks').insertBefore(fillBtn, document.getElementById('groupsContainer'));
 }
 
 function getNameParts() {
   const first = document.getElementById('firstName').value.trim();
   const last = document.getElementById('lastName').value.trim();
-  const alias = document.getElementById('aliasName').value.trim();
-  return { first, last, alias, full: `${first} ${last}`.trim() };
+  return { first, last, full: `${first} ${last}`.trim() };
+}
+
+/* ---- roster typo check -- catches misspellings against this season's approved entrant list
+   (subNormalizeName is defined further down, in the Who's Submitted section -- function
+   declarations are hoisted, so it's fine to use it up here). ---- */
+function levenshteinDistance(a, b) {
+  const m = a.length, n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  let prevRow = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const row = [i];
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      row.push(Math.min(row[j - 1] + 1, prevRow[j] + 1, prevRow[j - 1] + cost));
+    }
+    prevRow = row;
+  }
+  return prevRow[n];
+}
+
+// Returns { status: 'exact'|'close'|'none'|'skip', match, distance }. 'skip' means the roster
+// list hasn't been filled in yet, so the check is a no-op (nobody gets blocked). 'close' means a
+// near-miss (likely a typo) within a length-scaled edit-distance threshold -- close enough to
+// suggest a correction, but not exact.
+function findRosterMatch(fullName) {
+  if (!APPROVED_ENTRANTS.length) return { status: 'skip' };
+  const norm = subNormalizeName(fullName);
+  if (!norm) return { status: 'skip' };
+  for (const approved of APPROVED_ENTRANTS) {
+    if (subNormalizeName(approved) === norm) return { status: 'exact', match: approved, distance: 0 };
+  }
+  let best = null, bestDist = Infinity;
+  for (const approved of APPROVED_ENTRANTS) {
+    const d = levenshteinDistance(norm, subNormalizeName(approved));
+    if (d < bestDist) { bestDist = d; best = approved; }
+  }
+  const threshold = Math.max(1, Math.round(norm.length * 0.25)); // allow ~1 typo per ~4 characters
+  if (best && bestDist <= threshold) return { status: 'close', match: best, distance: bestDist };
+  return { status: 'none' };
 }
 
 function collectPicks() {
@@ -330,6 +528,34 @@ function validate() {
     problems.push('enter your first and last name');
   } else {
     nameErr.style.display = 'none';
+  }
+
+  // Roster typo check -- only runs once a name is actually entered, and only if this season's
+  // roster has been filled in (APPROVED_ENTRANTS). A close-but-not-exact match suggests a fix; no
+  // match at all (or a fix the entrant doesn't make) requires checking "I'm new" to proceed.
+  const rosterMsgEl = document.getElementById('rosterMsg');
+  const newEntrantLabel = document.getElementById('newEntrantLabel');
+  const newEntrantCheck = document.getElementById('newEntrantCheck');
+  if (first && last) {
+    const result = findRosterMatch(`${first} ${last}`);
+    if (result.status === 'exact' || result.status === 'skip') {
+      rosterMsgEl.style.display = 'none';
+      newEntrantLabel.style.display = 'none';
+    } else if (result.status === 'close') {
+      rosterMsgEl.textContent = `We don't see "${first} ${last}" exactly on this season's list -- did you mean "${result.match}"? ` +
+        `Double-check your spelling above, or check the box below if this really is a different/new entry.`;
+      rosterMsgEl.style.display = 'block';
+      newEntrantLabel.style.display = 'block';
+      if (!newEntrantCheck.checked) { ok = false; problems.push('double-check your name spelling against the roster, or check "I\'m new"'); }
+    } else { // 'none'
+      rosterMsgEl.textContent = `We don't see "${first} ${last}" on this season's list yet. If you're new to the pool, check the box below to confirm and continue -- we'll get you added.`;
+      rosterMsgEl.style.display = 'block';
+      newEntrantLabel.style.display = 'block';
+      if (!newEntrantCheck.checked) { ok = false; problems.push('confirm you\'re new to the pool (check the box), or fix your name to match the roster'); }
+    }
+  } else {
+    rosterMsgEl.style.display = 'none';
+    newEntrantLabel.style.display = 'none';
   }
 
   const { data, allSelections } = collectPicks();
@@ -433,12 +659,16 @@ document.getElementById('submitOnlineBtn').addEventListener('click', () => {
     return;
   }
   const btn = document.getElementById('submitOnlineBtn');
-  const { first, last, alias, full: name } = getNameParts();
+  const { first, last, full: name } = getNameParts();
   const { data } = collectPicks();
+  const newEntrantCheck = document.getElementById('newEntrantCheck');
 
   const payload = {
     secret: SUBMIT_SECRET, tournament: TOURNAMENT_ID,
-    entrantName: name, firstName: first, lastName: last, alias: alias
+    entrantName: name, firstName: first, lastName: last,
+    // Flagged when the entrant checked "I'm new" past the roster check -- lets whoever's
+    // reviewing submissions know to add them to next season's approved list.
+    isNew: (newEntrantCheck && newEntrantCheck.checked) ? "Yes" : ""
   };
   groupNames.forEach(g => {
     const key = g.replace(/\s+/g, '');
@@ -463,6 +693,9 @@ document.getElementById('submitOnlineBtn').addEventListener('click', () => {
   }).then(() => {
     btn.textContent = '✅ Submitted — check the sheet to confirm';
     document.getElementById('saveRecordSection').style.display = 'block';
+    // Give the sheet a moment, then eagerly refresh the Who's Submitted list so
+    // it has a head start by the time the entrant switches tabs to check it.
+    setTimeout(refreshSubmitted, 60 * 1000);
   }).catch(() => {
     btn.disabled = false;
     btn.textContent = '🔁 Try Again';
@@ -550,6 +783,103 @@ document.getElementById('copyBtn').addEventListener('click', () => {
 } catch (pageErr) {
   showPageError('building the pick form', pageErr);
 }
+
+/* ====================== Who's Submitted tab ====================== */
+/* Reads the same published Picks TSV the Leaderboard page reads. Column layout must stay in
+   sync with COL in Leaderboard.html and the Apps Script schema (name=0, lastName=22,
+   submittedAt=21). Only used for display here -- no scoring, no lock-time logic. */
+const SUB_COL = { name: 0, lastName: 22, submittedAt: 21 };
+
+function subNormalizeName(s) {
+  if (!s) return "";
+  const manualMap = { "ø":"o","Ø":"o","æ":"ae","Æ":"ae","å":"a","Å":"a","ß":"ss",
+    "ð":"d","Ð":"d","þ":"th","Þ":"th","đ":"d","Đ":"d","ł":"l","Ł":"l" };
+  let out = s.normalize("NFD").replace(/[̀-ͯ]/g, "");
+  out = out.replace(/[øØæÆåÅßðÐþÞđĐłŁ]/g, ch => manualMap[ch] || ch);
+  return out.replace(/[.,]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function subParseTSV(text) {
+  const lines = text.replace(/\r/g, "").split("\n").filter(l => l.length > 0);
+  if (lines.length < 2) return [];
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) rows.push(lines[i].split("\t"));
+  return rows;
+}
+
+function subParseTimestamp(s) {
+  if (!s) return null;
+  const t = new Date(s).getTime();
+  return isNaN(t) ? null : t;
+}
+
+async function fetchSubmissions() {
+  const res = await fetch(PICKS_TSV_URL, { cache: "no-store" });
+  if (!res.ok) throw new Error("Could not load submissions (HTTP " + res.status + ")");
+  const text = await res.text();
+  const rows = subParseTSV(text);
+  const byKey = new Map(); // normalized name -> latest {fullName, submittedAt, ms}
+  for (const r of rows) {
+    const fullName = (r[SUB_COL.name] || "").trim();
+    if (!fullName) continue;
+    const submittedAt = (r[SUB_COL.submittedAt] || "").trim();
+    const ms = subParseTimestamp(submittedAt);
+    const key = subNormalizeName(fullName);
+    const existing = byKey.get(key);
+    // Keep whichever submission is most recent -- resubmitting (e.g. to fix a pick) just
+    // updates the timestamp shown here rather than creating a duplicate row.
+    if (!existing || (ms ?? -Infinity) > (existing.ms ?? -Infinity)) {
+      byKey.set(key, { fullName, submittedAt, ms });
+    }
+  }
+  return [...byKey.values()].sort((a, b) => (b.ms ?? -Infinity) - (a.ms ?? -Infinity));
+}
+
+function renderSubmitted(list) {
+  const tbody = document.querySelector('#tbl-submitted tbody');
+  const noneEl = document.getElementById('submittedNone');
+  if (!list.length) {
+    tbody.innerHTML = '';
+    noneEl.style.display = 'block';
+    return;
+  }
+  noneEl.style.display = 'none';
+  tbody.innerHTML = list.map(s =>
+    `<tr data-search-key="${subNormalizeName(s.fullName)}"><td>${s.fullName}</td><td>${s.submittedAt || '—'}</td></tr>`
+  ).join('');
+}
+
+let submittedRefreshing = false;
+async function refreshSubmitted() {
+  if (submittedRefreshing) return;
+  submittedRefreshing = true;
+  const statusEl = document.getElementById('submittedUpdated');
+  statusEl.textContent = 'Updating…';
+  try {
+    const list = await fetchSubmissions();
+    document.getElementById('submittedError').style.display = 'none';
+    renderSubmitted(list);
+    statusEl.textContent = list.length + ' submitted — last checked ' + new Date().toLocaleTimeString();
+  } catch (err) {
+    const box = document.getElementById('submittedError');
+    box.style.cssText = 'display:block; background:var(--lightred); color:var(--red); border:1px solid #f0c9c6; padding:10px 14px; border-radius:6px; font-size:.85rem; margin:10px 0;';
+    box.textContent = "Couldn't fully refresh (" + (err && err.message ? err.message : err) + "). Showing the last successful data below -- hit Refresh to try again.";
+    statusEl.textContent = 'Last checked ' + new Date().toLocaleTimeString() + ' (refresh failed)';
+  } finally {
+    submittedRefreshing = false;
+  }
+}
+
+document.getElementById('submittedRefreshBtn').addEventListener('click', refreshSubmitted);
+document.getElementById('submittedSearch').addEventListener('input', (e) => {
+  const q = subNormalizeName(e.target.value);
+  document.querySelectorAll('#tbl-submitted tbody tr').forEach(row => {
+    row.style.display = row.dataset.searchKey.includes(q) ? '' : 'none';
+  });
+});
+
+refreshSubmitted();
+setInterval(refreshSubmitted, SUBMITTED_REFRESH_MS);
 </script>
 
 </body>
