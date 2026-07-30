@@ -89,6 +89,28 @@
     border-radius:50%; animation:spin 0.8s linear infinite; vertical-align:middle; margin-right:4px;
   }
   @keyframes spin{to{transform:rotate(360deg);}}
+  .tb-group{
+    background:var(--card); border:1px solid var(--border); border-radius:10px;
+    padding:14px 16px; margin-bottom:14px;
+  }
+  .tb-group h3{margin:0 0 6px; font-size:1rem; color:var(--green-dark);}
+  .tb-group .tb-split h3{color:var(--red);}
+  .tb-scoreline{font-size:.82rem; color:#556; margin-bottom:10px;}
+  .tb-group table{margin:8px 0 12px; font-size:.8rem;}
+  .tb-group table th, .tb-group table td{border:1px solid var(--border); padding:4px 8px; text-align:center;}
+  .tb-group table td:first-child, .tb-group table th:first-child{text-align:left;}
+  .tb-winner-cell{background:var(--lightgold); font-weight:700;}
+  .tb-draft{
+    background:var(--lightgray); border:1px dashed var(--border); border-radius:6px;
+    padding:10px 12px; font-size:.85rem; white-space:pre-wrap; line-height:1.5; margin-top:6px;
+  }
+  .tb-copybtn{
+    margin-top:8px; padding:5px 12px; border-radius:6px; border:1px solid var(--green);
+    background:#fff; color:var(--green); font-size:.8rem; cursor:pointer;
+  }
+  .tb-copybtn:hover{background:var(--lightgreen);}
+  .tb-copybtn.copied{background:var(--green); color:#fff; border-color:var(--green);}
+  .tb-none{text-align:center; color:#889; font-size:.85rem; padding:20px 0;}
 </style>
 </head>
 <body>
@@ -113,6 +135,7 @@
     <div class="tab" data-panel="day3">Day 3</div>
     <div class="tab" data-panel="day4">Day 4</div>
     <div class="tab" data-panel="scorecards">Scorecards</div>
+    <div class="tab" data-panel="tiebreakers">Tiebreakers</div>
   </div>
 
   <div class="panel active" id="panel-overall"><div class="card"><table id="tbl-overall"></table><div class="note" id="tbl-overall-note" style="display:none;">* = live running total (best 5 of however many of that entrant's picks have posted so far) -- not final until 5+ have scores.</div></div></div>
@@ -124,6 +147,14 @@
     <input type="text" class="searchbox" id="scSearch" placeholder="Search entrant name…">
     <div class="note">Every entrant's 15 picks, live round-by-round scores (vs. par), and running total. <span class="live-mark" style="background:var(--lightgold); padding:1px 6px; border-radius:4px; color:var(--text); font-weight:700;">highlighted</span> scores are the ones actually counting toward that column's total right now.</div>
     <div class="scorecard-grid" id="scorecardGrid"></div>
+  </div>
+  <div class="panel" id="panel-tiebreakers">
+    <div class="note">Auto-detected ties for Day 1-4 and Overall, resolved using the same rule Chip
+      uses: compare each tied entrant's next-best pick beyond the ones that count (11th pick for
+      Day 1/2, 6th pick for Day 3/4/Overall), lowest score wins that level, repeat until broken.
+      If all 15 picks tie, the spot splits. Each card has a starter paragraph you can copy into the
+      results email and dress up.</div>
+    <div id="tiebreakerReport"></div>
   </div>
 
   <p class="note" id="footNote"></p>
@@ -576,6 +607,151 @@ document.getElementById("tabs").addEventListener("click", (e) => {
   document.getElementById("panel-" + tab.dataset.panel).classList.add("active");
 });
 
+/* ====================== tiebreaker resolver ====================== */
+// Mirrors the rule Chip Brunt spells out in his Day 1-4 results emails: a day's total is the
+// best N of an entrant's 15 picks (N=10 for Day1/Day2, N=5 for Day3/Day4/Overall). If two or
+// more entrants tie on that total, compare their (N+1)th-best pick, then (N+2)th, and so on --
+// lowest (best/most-under-par) score wins that level and survives to the next; anyone worse is
+// eliminated. If it goes all the way through all 15 picks still tied, the spot splits.
+function ordinal(n) {
+  const s = ["th", "st", "nd", "rd"], v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
+function resolveTie(tiedEntrants, valuesKey, n) {
+  let candidates = tiedEntrants.map(e => ({
+    entrant: e,
+    sorted: e.slots.map(s => s[valuesKey]).filter(v => typeof v === "number").sort((a, b) => a - b),
+  }));
+  const steps = [];
+  let level = n; // 0-indexed position of the next tiebreak pick (n=10 -> position 10 is the "11th" pick)
+  while (candidates.length > 1 && level < 15) {
+    const withVal = candidates.map(c => ({ c, v: c.sorted[level] }));
+    const present = withVal.filter(x => typeof x.v === "number");
+    if (present.length === 0) { level++; continue; }
+    const min = Math.min(...present.map(x => x.v));
+    steps.push({ ord: level + 1, values: withVal.map(x => ({ name: x.c.entrant.fullName, v: x.v })) });
+    candidates = withVal.filter(x => x.v === min).map(x => x.c);
+    level++;
+  }
+  return {
+    winner: candidates.length === 1 ? candidates[0].entrant : null,
+    split: candidates.length > 1,
+    finalists: candidates.map(c => c.entrant),
+    steps,
+  };
+}
+
+// Finds every group of entrants tied on a given day/overall total, and resolves each one.
+function computeTiebreakGroups(computed, dayKey, n, valuesKey) {
+  const ranked = rankWithTies(computed, dayKey);
+  const groups = [];
+  let i = 0;
+  while (i < ranked.length) {
+    if (ranked[i].tied) {
+      const score = ranked[i][dayKey];
+      const group = [];
+      let j = i;
+      while (j < ranked.length && ranked[j][dayKey] === score) { group.push(ranked[j]); j++; }
+      groups.push({ rank: ranked[i].rank, score, entrants: group });
+      i = j;
+    } else {
+      i++;
+    }
+  }
+  return groups.map(g => ({ ...g, resolution: resolveTie(g.entrants, valuesKey, n) }));
+}
+
+function namesJoin(names) {
+  if (names.length <= 1) return names.join("");
+  if (names.length === 2) return names[0] + " and " + names[1];
+  return names.slice(0, -1).join(", ") + " and " + names[names.length - 1];
+}
+
+// Builds a plain-English starter paragraph in the same spirit as Chip's writeups -- states the
+// tie, the deciding pick(s), and the winner (or the split). Meant to be pasted into the results
+// email and dressed up with color commentary, not sent verbatim.
+function buildTiebreakWriteup(dayLabel, group) {
+  const names = group.entrants.map(e => e.fullName);
+  const scoreStr = fmtScore(group.score);
+  const res = group.resolution;
+  if (res.winner) {
+    const decidingStep = res.steps[res.steps.length - 1];
+    const winnerVal = decidingStep.values.find(v => v.name === res.winner.fullName).v;
+    const others = decidingStep.values.filter(v => v.name !== res.winner.fullName)
+      .map(v => v.name + " (" + fmtScore(v.v) + ")").join(", ");
+    let text = `We had a ${names.length}-way tie for ${dayLabel} between ${namesJoin(names)}, all at (${scoreStr}). `;
+    if (res.steps.length > 1) {
+      text += `It took a few levels to sort out, but `;
+    }
+    text += `${res.winner.fullName} wins the tiebreaker with their ${ordinal(decidingStep.ord)} best player's score of (${fmtScore(winnerVal)})`;
+    if (others) text += ` compared to ${others}`;
+    text += `. Congrats ${res.winner.fullName}!`;
+    return text;
+  } else {
+    return `We had a tie for ${dayLabel} between ${namesJoin(names)}, all at (${scoreStr}), that couldn't be broken even after ` +
+      `comparing all 15 picks. Per the rules, this spot splits evenly between ${namesJoin(names)}.`;
+  }
+}
+
+const DAY_TIEBREAK_CONFIG = [
+  { key: "day1", label: "Day 1", n: 10, valuesKey: "r1" },
+  { key: "day2", label: "Day 2", n: 10, valuesKey: "r2" },
+  { key: "day3", label: "Day 3", n: 5, valuesKey: "r3" },
+  { key: "day4", label: "Day 4", n: 5, valuesKey: "r4" },
+  { key: "overall", label: "the Overall", n: 5, valuesKey: "liveTotal" },
+];
+
+function renderTiebreakers(computed) {
+  const box = document.getElementById("tiebreakerReport");
+  let html = "";
+  let anyTies = false;
+  for (const cfg of DAY_TIEBREAK_CONFIG) {
+    const groups = computeTiebreakGroups(computed, cfg.key, cfg.n, cfg.valuesKey);
+    for (const g of groups) {
+      anyTies = true;
+      const res = g.resolution;
+      html += `<div class="tb-group ${res.split ? "tb-split" : ""}">`;
+      html += `<h3>${cfg.label} — ${res.split ? "Unresolved tie" : "Tie resolved"} at rank ${g.rank} (${fmtScore(g.score)})</h3>`;
+      html += `<div class="tb-scoreline">Tied: ${g.entrants.map(e => e.fullName).join(", ")}</div>`;
+      if (res.steps.length > 0) {
+        html += `<table><thead><tr><th>Entrant</th>`;
+        for (const step of res.steps) html += `<th>${ordinal(step.ord)} pick</th>`;
+        html += `</tr></thead><tbody>`;
+        for (const name of g.entrants.map(e => e.fullName)) {
+          html += `<tr><td>${name}</td>`;
+          for (const step of res.steps) {
+            const cell = step.values.find(v => v.name === name);
+            const isWinnerCell = res.winner && res.winner.fullName === name && step === res.steps[res.steps.length - 1];
+            html += `<td class="${isWinnerCell ? "tb-winner-cell" : ""}">${cell ? fmtScore(cell.v) : "–"}</td>`;
+          }
+          html += `</tr>`;
+        }
+        html += `</tbody></table>`;
+      }
+      const draftId = "tbdraft-" + cfg.key + "-" + g.rank;
+      const draftText = buildTiebreakWriteup(cfg.label, g);
+      html += `<div class="tb-draft" id="${draftId}">${draftText}</div>`;
+      html += `<button type="button" class="tb-copybtn" data-target="${draftId}">Copy draft paragraph</button>`;
+      html += `</div>`;
+    }
+  }
+  if (!anyTies) {
+    html = `<div class="tb-none">No ties right now on Day 1-4 or Overall. This report updates automatically as scores come in.</div>`;
+  }
+  box.innerHTML = html;
+  box.querySelectorAll(".tb-copybtn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const text = document.getElementById(btn.dataset.target).textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        btn.textContent = "Copied!";
+        btn.classList.add("copied");
+        setTimeout(() => { btn.textContent = "Copy draft paragraph"; btn.classList.remove("copied"); }, 1500);
+      }).catch(() => { /* clipboard permissions can be flaky in some browsers -- fail silently */ });
+    });
+  });
+}
+
 /* ====================== main refresh cycle ====================== */
 let refreshing = false;
 async function refreshAll() {
@@ -597,6 +773,7 @@ async function refreshAll() {
     renderScorecards(computed.slice().sort((a, b) =>
       (a.lastName || a.fullName).localeCompare(b.lastName || b.fullName) || a.fullName.localeCompare(b.fullName)
     ));
+    renderTiebreakers(computed);
 
     document.getElementById("eventSub").textContent = scoreData.eventName + (scoreData.status ? " — " + scoreData.status : "");
     statusEl.textContent = "Last updated " + new Date().toLocaleTimeString();
