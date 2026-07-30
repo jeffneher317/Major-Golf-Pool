@@ -162,11 +162,11 @@
     <div class="tab" data-panel="tiebreakers">Tiebreakers</div>
   </div>
 
-  <div class="panel active" id="panel-overall"><div class="card"><table id="tbl-overall"></table><div class="note" id="tbl-overall-note" style="display:none;">* = live running total (best 5 of however many of that entry's picks have posted so far) -- not final until 5+ have scores.</div></div></div>
-  <div class="panel" id="panel-day1"><div class="card"><table id="tbl-day1"></table><div class="note" id="tbl-day1-note" style="display:none;">* = live running total (best 10 of however many have posted so far) -- not final until 10+ have scores.</div></div></div>
-  <div class="panel" id="panel-day2"><div class="card"><table id="tbl-day2"></table><div class="note" id="tbl-day2-note" style="display:none;">* = live running total (best 10 of however many have posted so far) -- not final until 10+ have scores.</div></div></div>
-  <div class="panel" id="panel-day3"><div class="card"><table id="tbl-day3"></table><div class="note" id="tbl-day3-note" style="display:none;">* = live running total (best 5 of however many have posted so far) -- not final until 5+ have scores.</div></div></div>
-  <div class="panel" id="panel-day4"><div class="card"><table id="tbl-day4"></table><div class="note" id="tbl-day4-note" style="display:none;">* = live running total (best 5 of however many have posted so far) -- not final until 5+ have scores.</div></div></div>
+  <div class="panel active" id="panel-overall"><div class="tb-provisional" id="unofficial-overall" style="display:none;"></div><div class="card"><table id="tbl-overall"></table><div class="note" id="tbl-overall-note" style="display:none;">* = live running total (best 5 of however many of that entry's picks have posted so far) -- not final until 5+ have scores.</div></div></div>
+  <div class="panel" id="panel-day1"><div class="tb-provisional" id="unofficial-day1" style="display:none;"></div><div class="card"><table id="tbl-day1"></table><div class="note" id="tbl-day1-note" style="display:none;">* = live running total (best 10 of however many have posted so far) -- not final until 10+ have scores.</div></div></div>
+  <div class="panel" id="panel-day2"><div class="tb-provisional" id="unofficial-day2" style="display:none;"></div><div class="card"><table id="tbl-day2"></table><div class="note" id="tbl-day2-note" style="display:none;">* = live running total (best 10 of however many have posted so far) -- not final until 10+ have scores.</div></div></div>
+  <div class="panel" id="panel-day3"><div class="tb-provisional" id="unofficial-day3" style="display:none;"></div><div class="card"><table id="tbl-day3"></table><div class="note" id="tbl-day3-note" style="display:none;">* = live running total (best 5 of however many have posted so far) -- not final until 5+ have scores.</div></div></div>
+  <div class="panel" id="panel-day4"><div class="tb-provisional" id="unofficial-day4" style="display:none;"></div><div class="card"><table id="tbl-day4"></table><div class="note" id="tbl-day4-note" style="display:none;">* = live running total (best 5 of however many have posted so far) -- not final until 5+ have scores.</div></div></div>
   <div class="panel" id="panel-scorecards">
     <input type="text" class="searchbox" id="scSearch" placeholder="Search entry name…">
     <div class="note">Every entry's 15 picks, live round-by-round scores (vs. par), and running total. <span class="live-mark" style="background:var(--lightgold); padding:1px 6px; border-radius:4px; color:var(--text); font-weight:700;">highlighted</span> scores are the ones actually counting toward that column's total right now.</div>
@@ -703,6 +703,41 @@ function isRoundComplete(scoresMap, roundNum) {
   return sawAny;
 }
 
+// "Unofficial" banners on Overall + Day 1-4 -- each tab is a live, in-progress view until its
+// underlying round(s) are actually complete. Overall isn't official until Round 4 wraps up (since
+// standings can still shift through the whole tournament); each Day tab is only official once that
+// specific round has finished. Scorecards deliberately doesn't get one -- Jeff only wanted this on
+// the standings tabs.
+function renderUnofficialBanners(scoreData) {
+  const day1Complete = isRoundComplete(scoreData.map, 1);
+  const day2Complete = isRoundComplete(scoreData.map, 2);
+  const day3Complete = isRoundComplete(scoreData.map, 3);
+  const day4Complete = isRoundComplete(scoreData.map, 4);
+
+  const configs = [
+    { id: "unofficial-overall", complete: day4Complete,
+      text: "⚠ These are live, in-progress Overall standings -- unofficial until Round 4 is complete." },
+    { id: "unofficial-day1", complete: day1Complete,
+      text: "⚠ This is a live, in-progress Day 1 leaderboard -- unofficial until Round 1 is complete." },
+    { id: "unofficial-day2", complete: day2Complete,
+      text: "⚠ This is a live, in-progress Day 2 leaderboard -- unofficial until Round 2 is complete." },
+    { id: "unofficial-day3", complete: day3Complete,
+      text: "⚠ This is a live, in-progress Day 3 leaderboard -- unofficial until Round 3 is complete." },
+    { id: "unofficial-day4", complete: day4Complete,
+      text: "⚠ This is a live, in-progress Day 4 leaderboard -- unofficial until Round 4 is complete." },
+  ];
+  for (const cfg of configs) {
+    const el = document.getElementById(cfg.id);
+    if (!el) continue;
+    if (cfg.complete) {
+      el.style.display = "none";
+    } else {
+      el.textContent = cfg.text;
+      el.style.display = "block";
+    }
+  }
+}
+
 // Produces a full finishing order for a group of same-score entrants, using the tiebreak rule.
 // Returns an array of "clusters" in finishing order -- most clusters are a single entrant, but a
 // cluster has more than one entrant when they're genuinely tied even after all 15 picks (their
@@ -1155,6 +1190,7 @@ async function refreshAll() {
     renderDayTable("tbl-day2", rankWithTies(computed, "day2"), "day2", "Day 2");
     renderDayTable("tbl-day3", rankWithTies(computed, "day3"), "day3", "Day 3");
     renderDayTable("tbl-day4", rankWithTies(computed, "day4"), "day4", "Day 4");
+    renderUnofficialBanners(scoreData);
     renderScorecards(computed.slice().sort((a, b) =>
       (a.lastName || a.fullName).localeCompare(b.lastName || b.fullName) || a.fullName.localeCompare(b.fullName)
     ));
