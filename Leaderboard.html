@@ -111,6 +111,18 @@
   .tb-copybtn:hover{background:var(--lightgreen);}
   .tb-copybtn.copied{background:var(--green); color:#fff; border-color:var(--green);}
   .tb-none{text-align:center; color:#889; font-size:.85rem; padding:20px 0;}
+  .tb-scorecards{margin:12px 0 6px;}
+  .sc-card td.tb-decider{
+    background:#dbe9fb; font-weight:700; border-radius:4px; box-shadow:inset 0 0 0 1px #6f9ce0;
+  }
+  .tb-legend{
+    font-size:.72rem; color:#667; margin:0 0 14px; display:flex; gap:16px;
+    flex-wrap:wrap; justify-content:center;
+  }
+  .tb-legend span{display:inline-flex; align-items:center; gap:5px;}
+  .tb-legend i{width:12px; height:12px; border-radius:3px; display:inline-block;}
+  .tb-legend .sw-counted{background:var(--lightgold);}
+  .tb-legend .sw-decider{background:#dbe9fb; box-shadow:inset 0 0 0 1px #6f9ce0;}
 </style>
 </head>
 <body>
@@ -710,7 +722,73 @@ function computeTiebreakGroups(computed, dayKey, n, valuesKey, maxRank) {
   return groups;
 }
 
-function renderTiebreakGroup(label, g, startRank) {
+// Returns the Set of original slot indices whose sorted rank (1-indexed) falls within
+// [startRank, endRank] -- e.g. indicesInRange(values, 6, 6) finds whichever slot holds an
+// entrant's 6th-best pick, regardless of where that pick sits in their Group A-E order.
+function indicesInRange(values, startRank, endRank) {
+  const withIdx = values.map((v, i) => ({ v, i })).filter(x => typeof x.v === "number" && !isNaN(x.v));
+  withIdx.sort((a, b) => a.v - b.v);
+  const set = new Set();
+  const end = Math.min(endRank, withIdx.length);
+  for (let r = startRank; r <= end; r++) set.add(withIdx[r - 1].i);
+  return set;
+}
+
+// The highest tiebreak level actually needed anywhere in this group -- e.g. if everyone sorted
+// out by the 6th pick except one pair that needed the 8th, this is 8. Used so every entrant's
+// mini scorecard highlights the same comparison range, making them easy to eyeball side by side.
+function groupMaxLevel(g, n) {
+  let maxLevel = n;
+  for (const cluster of g.clusters) {
+    for (const row of cluster) {
+      if (row.decidingLevel) maxLevel = Math.max(maxLevel, row.decidingLevel);
+      else if (row.splitWithPrev) maxLevel = Math.max(maxLevel, 15);
+    }
+  }
+  return maxLevel;
+}
+
+const TB_IDX_KEY = { r1: "day1Idx", r2: "day2Idx", r3: "day3Idx", r4: "day4Idx", liveTotal: "overallIdx" };
+
+// Full scorecards (same Player/R1/R2/R3/R4/Total grid as the Scorecards tab) for just the tied
+// entrants, side by side. Gold = counted toward the base total (best N). Blue = the tiebreak
+// pick(s) actually in play for this group, on whichever column matches this tie type (R1 for a
+// Day 1 tie, Total for an Overall tie, etc.) -- so it's visually obvious why one entrant beat
+// another.
+function renderTiebreakScorecards(g, cfg) {
+  const maxLevel = groupMaxLevel(g, cfg.n);
+  let html = `<div class="scorecard-grid tb-scorecards">`;
+  for (const e of g.entrants) {
+    const values = e.slots.map(s => s[cfg.valuesKey]);
+    const deciderSet = indicesInRange(values, cfg.n + 1, maxLevel);
+    let rows = "";
+    e.slots.forEach((s, idx) => {
+      const isCutOrWd = s.total === "CUT" || s.total === "WD";
+      const cls = { r1: "", r2: "", r3: "", r4: "", liveTotal: "" };
+      for (const k of ["r1", "r2", "r3", "r4", "liveTotal"]) {
+        const idxSet = e[TB_IDX_KEY[k]];
+        if (idxSet && idxSet.has(idx)) cls[k] = "counted";
+      }
+      if (!cls[cfg.valuesKey] && deciderSet.has(idx)) cls[cfg.valuesKey] = "tb-decider";
+      const totalDisplay = isCutOrWd ? s.total : fmtScore(s.liveTotal);
+      rows += `<tr><td>${s.name}${s.found ? "" : ' <span class="cut">(no live match)</span>'}</td>` +
+        `<td class="num ${cls.r1}">${fmtScore(s.r1)}</td><td class="num ${cls.r2}">${fmtScore(s.r2)}</td>` +
+        `<td class="num ${cls.r3}">${fmtScore(s.r3)}</td><td class="num ${cls.r4}">${fmtScore(s.r4)}</td>` +
+        `<td class="num ${isCutOrWd ? "cut" : cls.liveTotal}">${totalDisplay}</td></tr>`;
+    });
+    html += `<div class="sc-card">
+      <div class="sc-head"><div class="nm">${e.fullName}</div></div>
+      <table><thead><tr><th>Player</th><th class="num">R1</th><th class="num">R2</th><th class="num">R3</th><th class="num">R4</th><th class="num">Total</th></tr></thead>
+      <tbody>${rows}</tbody></table>
+    </div>`;
+  }
+  html += `</div>`;
+  html += `<div class="tb-legend"><span><i class="sw-counted"></i>Counted toward the base total (best ${cfg.n})</span>` +
+    `<span><i class="sw-decider"></i>Tiebreaker pick(s) in play</span></div>`;
+  return html;
+}
+
+function renderTiebreakGroup(label, g, startRank, cfg) {
   const totalCount = g.entrants.length;
   const isSplitOnly = g.clusters.length === 1; // nobody separated at all -- everyone stays tied
   let html = `<div class="tb-group ${isSplitOnly ? "tb-split" : ""}">`;
@@ -732,6 +810,7 @@ function renderTiebreakGroup(label, g, startRank) {
     rank += cluster.length;
   }
   html += `</tbody></table>`;
+  html += renderTiebreakScorecards(g, cfg);
   const draftId = "tbdraft-" + label.replace(/\W+/g, "") + "-" + startRank;
   const draftText = buildTiebreakWriteup(label, g, startRank);
   html += `<div class="tb-draft" id="${draftId}">${draftText}</div>`;
@@ -800,15 +879,16 @@ function renderTiebreakers(computed, scoreData) {
     const groups = computeTiebreakGroups(computed, cfg.key, cfg.n, cfg.valuesKey, 1);
     for (const g of groups) {
       anyTies = true;
-      html += renderTiebreakGroup(cfg.label, g, g.rank);
+      html += renderTiebreakGroup(cfg.label, g, g.rank, cfg);
     }
   }
 
   // --- Overall: ranks 1..OVERALL_PAYOUT_SPOTS, live ---
-  const overallGroups = computeTiebreakGroups(computed, "overall", 5, "liveTotal", OVERALL_PAYOUT_SPOTS);
+  const overallCfg = { label: "Overall", n: 5, valuesKey: "liveTotal" };
+  const overallGroups = computeTiebreakGroups(computed, "overall", overallCfg.n, overallCfg.valuesKey, OVERALL_PAYOUT_SPOTS);
   for (const g of overallGroups) {
     anyTies = true;
-    html += renderTiebreakGroup("Overall", g, g.rank);
+    html += renderTiebreakGroup("Overall", g, g.rank, overallCfg);
   }
 
   if (!anyTies) {
