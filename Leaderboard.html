@@ -76,6 +76,9 @@
     background:var(--lightgreen) !important; font-weight:700; border-top:2px solid var(--green);
   }
   .live-mark{color:var(--gold); font-weight:700; margin-left:1px;}
+  .sc-card td.counted{
+    background:var(--lightgold); font-weight:700; border-radius:4px;
+  }
   .searchbox{
     width:100%; max-width:320px; padding:8px 10px; border:1px solid var(--border);
     border-radius:6px; font-size:.9rem; margin:0 auto 14px; display:block;
@@ -119,7 +122,7 @@
   <div class="panel" id="panel-day4"><div class="card"><table id="tbl-day4"></table><div class="note" id="tbl-day4-note" style="display:none;">* = live running total (best 5 of however many have posted so far) -- not final until 5+ have scores.</div></div></div>
   <div class="panel" id="panel-scorecards">
     <input type="text" class="searchbox" id="scSearch" placeholder="Search entrant name…">
-    <div class="note">Every entrant's 15 picks, live round-by-round scores (vs. par), and running total.</div>
+    <div class="note">Every entrant's 15 picks, live round-by-round scores (vs. par), and running total. <span class="live-mark" style="background:var(--lightgold); padding:1px 6px; border-radius:4px; color:var(--text); font-weight:700;">highlighted</span> scores are the ones actually counting toward that column's total right now.</div>
     <div class="scorecard-grid" id="scorecardGrid"></div>
   </div>
 
@@ -422,6 +425,16 @@ function sumLowest(values, n) {
 function countAvailable(values) {
   return values.filter(v => typeof v === "number" && !isNaN(v)).length;
 }
+function bestIndices(values, n) {
+  // Returns the Set of original array indices whose value is one of the min(n, available)
+  // actually summed by sumLowest(values, n) -- used to highlight which golfers are counting
+  // toward a given total. Sort is stable, so a tie sitting right on the cutoff line resolves the
+  // same way sumLowest itself resolves it (original pick order).
+  const withIdx = values.map((v, i) => ({ v, i })).filter(x => typeof x.v === "number" && !isNaN(x.v));
+  withIdx.sort((a, b) => a.v - b.v);
+  const take = Math.min(n, withIdx.length);
+  return new Set(withIdx.slice(0, take).map(x => x.i));
+}
 
 function computeEntrant(entrant, scoresMap) {
   const slots = entrant.picks.map(p => {
@@ -447,9 +460,14 @@ function computeEntrant(entrant, scoresMap) {
   const day3Partial = day3 != null && countAvailable(r3s) < 5;
   const day4Partial = day4 != null && countAvailable(r4s) < 5;
   const overallPartial = overall != null && countAvailable(liveTotals) < 5;
+  // Which golfer rows are actually counting toward each total -- for highlighting in the UI.
+  const day1Idx = bestIndices(r1s, 10), day2Idx = bestIndices(r2s, 10);
+  const day3Idx = bestIndices(r3s, 5), day4Idx = bestIndices(r4s, 5);
+  const overallIdx = bestIndices(liveTotals, 5);
   return {
     ...entrant, slots, day1, day2, day3, day4, overall,
     day1Partial, day2Partial, day3Partial, day4Partial, overallPartial,
+    day1Idx, day2Idx, day3Idx, day4Idx, overallIdx,
   };
 }
 
@@ -505,13 +523,22 @@ function renderScorecards(entrants) {
     div.className = "sc-card";
     div.dataset.searchKey = normalizeName(e.fullName);
     let rows = "";
-    for (const s of e.slots) {
+    e.slots.forEach((s, idx) => {
       const isCutOrWd = s.total === "CUT" || s.total === "WD";
+      const c1 = e.day1Idx && e.day1Idx.has(idx) ? "counted" : "";
+      const c2 = e.day2Idx && e.day2Idx.has(idx) ? "counted" : "";
+      const c3 = e.day3Idx && e.day3Idx.has(idx) ? "counted" : "";
+      const c4 = e.day4Idx && e.day4Idx.has(idx) ? "counted" : "";
+      const cT = e.overallIdx && e.overallIdx.has(idx) ? "counted" : "";
+      // Total column shows the live running total (sum of whichever rounds this golfer has
+      // posted so far) -- same number that feeds the Overall aggregate -- not just the final
+      // 4-round total, so it's meaningful from Day 1 on and updates as rounds progress.
+      const totalDisplay = isCutOrWd ? s.total : fmtScore(s.liveTotal);
       rows += `<tr><td>${s.name}${s.found ? "" : ' <span class="cut">(no live match)</span>'}</td>` +
-        `<td class="num">${fmtScore(s.r1)}</td><td class="num">${fmtScore(s.r2)}</td>` +
-        `<td class="num">${fmtScore(s.r3)}</td><td class="num">${fmtScore(s.r4)}</td>` +
-        `<td class="num ${isCutOrWd ? 'cut' : ''}">${isCutOrWd ? s.total : fmtScore(s.total)}</td></tr>`;
-    }
+        `<td class="num ${c1}">${fmtScore(s.r1)}</td><td class="num ${c2}">${fmtScore(s.r2)}</td>` +
+        `<td class="num ${c3}">${fmtScore(s.r3)}</td><td class="num ${c4}">${fmtScore(s.r4)}</td>` +
+        `<td class="num ${isCutOrWd ? 'cut' : cT}">${totalDisplay}</td></tr>`;
+    });
     const totalRow = e.locked ? "" : `<tr class="sc-total-row">` +
       `<td>Total (best 10 / best 5)</td>` +
       `<td class="num">${fmtScoreLive(e.day1, e.day1Partial)}</td>` +
