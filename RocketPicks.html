@@ -42,6 +42,11 @@
     background:var(--lightgold, #fdf3d0); border:1px solid var(--gold); border-radius:6px;
     padding:8px 10px; font-size:.82rem; color:#7a6420; margin-top:8px; line-height:1.4;
   }
+  .deadline-note{
+    background:var(--lightgold, #fdf3d0); border:1px solid var(--gold); border-radius:8px;
+    padding:10px 14px; font-size:.85rem; color:#7a6420; margin-bottom:16px; line-height:1.5;
+    text-align:center; font-weight:600;
+  }
   .actions{position:sticky; bottom:0; background:var(--bg); padding:16px 0 4px;}
   button{
     width:100%; padding:14px; font-size:1.05rem; font-weight:700; border:none;
@@ -139,7 +144,7 @@
 <div id="gateOverlay">
   <div class="gateCard">
     <h2>🔒 Entry Password Required</h2>
-    <p>This pool is by invitation only. Enter the password shared with entrants to make your picks.</p>
+    <p>This pool is by invitation only. Enter the password shared with entries to make your picks.</p>
     <input type="password" id="gatePassword" placeholder="Password" autocomplete="off">
     <div class="gateErr" id="gateErr"></div>
     <button id="gateBtn" type="button">Enter</button>
@@ -164,6 +169,8 @@
   <!-- ====================== PANEL: Make Your Picks ====================== -->
   <div class="panel active" id="panel-picks">
 
+  <div class="deadline-note" id="deadlineNote"></div>
+
   <div class="card">
     <h2>Your Info</h2>
     <label for="firstName">First Name</label>
@@ -172,8 +179,8 @@
     <input type="text" id="lastName" placeholder="e.g. Neher" autocomplete="family-name">
     <div class="err" id="nameErr">Please enter your first and last name.</div>
     <div class="roster-msg" id="rosterMsg" style="display:none;"></div>
-    <label id="newEntrantLabel" style="display:none; margin-top:6px; font-weight:400;">
-      <input type="checkbox" id="newEntrantCheck" style="width:auto; display:inline-block; margin-right:6px; vertical-align:middle;">
+    <label id="newEntryLabel" style="display:none; margin-top:6px; font-weight:400;">
+      <input type="checkbox" id="newEntryCheck" style="width:auto; display:inline-block; margin-right:6px; vertical-align:middle;">
       <span>I'm not on this list — I'm new to the pool this season</span>
     </label>
     <p class="note">Pick from each of the 5 groups below (5 from Group A, 4 from Group B, 3 from Group C, 2 from Group D, 1 from Group E — 15 total), plus 1 alternate per group. The alternate only comes into play if one of your picks in that group withdraws before or during Round 1 or 2. No duplicate golfers across your whole team. Not sure who's in each group? Check the <a href="#" data-goto-panel="rosters" style="color:var(--green-dark); font-weight:600;">Group Rosters</a> tab above.</p>
@@ -261,7 +268,7 @@
     <div id="submittedError"></div>
     <input type="text" class="searchbox" id="submittedSearch" placeholder="Search your name…">
     <div class="card">
-      <table id="tbl-submitted"><thead><tr><th>Entrant</th><th>Last Submitted</th></tr></thead><tbody></tbody></table>
+      <table id="tbl-submitted"><thead><tr><th>Entry</th><th>Last Submitted</th></tr></thead><tbody></tbody></table>
       <div class="submitted-none" id="submittedNone" style="display:none;">No submissions yet.</div>
     </div>
   </div><!-- /panel-submitted -->
@@ -285,32 +292,33 @@
 /* ====================== CONFIG — edit this each tournament ====================== */
 const TOURNAMENT_NAME = "Rocket Classic (TEST) — Detroit Golf Club";
 const SEND_TO_EMAIL = "jeff.neher@gmail.com"; // change to whoever collects picks (e.g. Chip Brunt)
-const ENTRY_PASSWORD = "Detroit2026"; // change this each tournament and share it with entrants only
+const ENTRY_PASSWORD = "Detroit2026"; // change this each tournament and share it with entries only
 const GROUP_PICKS = {"Group A": 5, "Group B": 4, "Group C": 3, "Group D": 2, "Group E": 1}; // picks per group (15 total)
 const SUBMIT_URL = "https://script.google.com/macros/s/AKfycbxJp18dq8iLJzVAd-27eSvmZPJeGX-ERJxiHK3-aF0-v84_02ZheefVgIzAW4gxNCJOHw/exec"; // same Web App URL all year, shared by every tournament's form
 const SUBMIT_SECRET = "Majors2026"; // must exactly match SHARED_SECRET in the Apps Script — same all year
 const TOURNAMENT_ID = "Rocket Classic (TEST)"; // becomes this tournament's tab name in the year's Google Sheet
 const COURSE_INFO = "147 golfers in the field · Par 70 · 7,328 yards"; // field size + par, shown under the header — update each tournament (source: PGA Tour / tournament site)
+const PICKS_DEADLINE_TEXT = "5:00 AM Thursday, the morning the tournament begins"; // shown as the picks deadline notice -- update each tournament if the day/time ever changes
 // Publish-to-web TSV link for this tournament's Picks tab -- same sheet/gid the Leaderboard page
 // reads, used here only to show who has submitted so far (read-only, no scoring happens on this page).
 const PICKS_TSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vScRxv9AHrLvuftk8SFvhqdsQaENzrTydEgKbG7ow_ii56TNm7uKcJoO9maExpeERnsBCY5xzzvibdS/pub?gid=14865622&single=true&output=tsv";
 const SUBMITTED_REFRESH_MS = 90 * 1000; // how often the Who's Submitted tab auto re-pulls
-// This season's approved entrant roster, "First Last" -- used only to catch typos when someone
-// submits picks (e.g. misspelled last name). Pulled from Workbook A's Entrants tab -- update this
+// This season's approved entry roster, "First Last" -- used only to catch typos when someone
+// submits picks (e.g. misspelled last name). Pulled from Workbook A's Entry tab -- update this
 // list there first, then copy it over here each time the roster changes. Leave it empty to skip
 // the check entirely (nobody gets blocked while it's empty).
-const APPROVED_ENTRANTS = [
+const APPROVED_ENTRIES = [
   "Chip Brunt", "Jeff Neher", "Ron Brunt", "Sandy Brunt",
   "Scott Brunt", "Chris Starrs", "David White", "Jay Warrick",
   "Ken Warrick", "Tim Bourff", "Mike Gervasini", "Chris Lalonde",
   "Mike Lalonde", "Randy Smith", "Sandy Smith", "Bubba Stehmeier",
-  "Lynne Lewis", "Brad Harman", "Tom Harmam", "Rob Bouton",
+  "Lynne Lewis", "Brad Harmon", "Tom Harmon", "Rob Bouton",
   "Chad Carmichael", "Erick Banks", "Mike Orzel", "Jim Boudreau",
   "Bob Alger", "Paul Kiker", "Sam Trawick", "John Vernocy",
   "Marian Vernocy", "Seth Holloman", "Kevin Smallwood", "Eddie Stedem",
   "Rick Turner", "John Dicristo", "Jim Stout", "John Platko",
   "Richard Sorrow", "Jon Hayward", "Tim Radley", "Roger Kollat",
-  "Dalton Haven", "Gene Afusia", "Chris Jacovettie", "Larry Dukes",
+  "Dalton Haven", "Gene Afusia", "Chris Jacovetti", "Larry Dukes",
   "Shelton Collier", "Cullen Cameron", "Shane Hunt", "Greg Mangum",
   "Tyler Mayrosh", "Dennis Dingler", "Laura Neher", "Brent Coffee",
   "Geoff Cavender", "Barry Myers", "Jeff Zimmerman", "Bill Moertel",
@@ -426,6 +434,7 @@ groupNames.forEach((gname, gi) => {
 
 document.getElementById('eventLabel').textContent = TOURNAMENT_NAME;
 document.getElementById('courseInfo').textContent = COURSE_INFO;
+document.getElementById('deadlineNote').textContent = `⏰ Picks are open until ${PICKS_DEADLINE_TEXT} -- no submissions accepted after that.`;
 
 /* ---- hidden test helper — nobody sees this unless they know to add
    ?autofill=jeff to the URL. Fills every group with random valid picks
@@ -441,7 +450,7 @@ if (new URLSearchParams(window.location.search).get('autofill') === 'jeff') {
     if (!document.getElementById('firstName').value.trim() && !document.getElementById('lastName').value.trim()) {
       const n = Math.floor(Math.random() * 10000);
       document.getElementById('firstName').value = 'Test';
-      document.getElementById('lastName').value = 'Entrant ' + n;
+      document.getElementById('lastName').value = 'Entry ' + n;
     }
     groupNames.forEach(g => {
       const shuffled = GROUPS[g].slice();
@@ -463,7 +472,7 @@ function getNameParts() {
   return { first, last, full: `${first} ${last}`.trim() };
 }
 
-/* ---- roster typo check -- catches misspellings against this season's approved entrant list
+/* ---- roster typo check -- catches misspellings against this season's approved entry list
    (subNormalizeName is defined further down, in the Who's Submitted section -- function
    declarations are hoisted, so it's fine to use it up here). ---- */
 function levenshteinDistance(a, b) {
@@ -487,14 +496,14 @@ function levenshteinDistance(a, b) {
 // near-miss (likely a typo) within a length-scaled edit-distance threshold -- close enough to
 // suggest a correction, but not exact.
 function findRosterMatch(fullName) {
-  if (!APPROVED_ENTRANTS.length) return { status: 'skip' };
+  if (!APPROVED_ENTRIES.length) return { status: 'skip' };
   const norm = subNormalizeName(fullName);
   if (!norm) return { status: 'skip' };
-  for (const approved of APPROVED_ENTRANTS) {
+  for (const approved of APPROVED_ENTRIES) {
     if (subNormalizeName(approved) === norm) return { status: 'exact', match: approved, distance: 0 };
   }
   let best = null, bestDist = Infinity;
-  for (const approved of APPROVED_ENTRANTS) {
+  for (const approved of APPROVED_ENTRIES) {
     const d = levenshteinDistance(norm, subNormalizeName(approved));
     if (d < bestDist) { bestDist = d; best = approved; }
   }
@@ -531,31 +540,31 @@ function validate() {
   }
 
   // Roster typo check -- only runs once a name is actually entered, and only if this season's
-  // roster has been filled in (APPROVED_ENTRANTS). A close-but-not-exact match suggests a fix; no
-  // match at all (or a fix the entrant doesn't make) requires checking "I'm new" to proceed.
+  // roster has been filled in (APPROVED_ENTRIES). A close-but-not-exact match suggests a fix; no
+  // match at all (or a fix the entry doesn't make) requires checking "I'm new" to proceed.
   const rosterMsgEl = document.getElementById('rosterMsg');
-  const newEntrantLabel = document.getElementById('newEntrantLabel');
-  const newEntrantCheck = document.getElementById('newEntrantCheck');
+  const newEntryLabel = document.getElementById('newEntryLabel');
+  const newEntryCheck = document.getElementById('newEntryCheck');
   if (first && last) {
     const result = findRosterMatch(`${first} ${last}`);
     if (result.status === 'exact' || result.status === 'skip') {
       rosterMsgEl.style.display = 'none';
-      newEntrantLabel.style.display = 'none';
+      newEntryLabel.style.display = 'none';
     } else if (result.status === 'close') {
       rosterMsgEl.textContent = `We don't see "${first} ${last}" exactly on this season's list -- did you mean "${result.match}"? ` +
         `Double-check your spelling above, or check the box below if this really is a different/new entry.`;
       rosterMsgEl.style.display = 'block';
-      newEntrantLabel.style.display = 'block';
-      if (!newEntrantCheck.checked) { ok = false; problems.push('double-check your name spelling against the roster, or check "I\'m new"'); }
+      newEntryLabel.style.display = 'block';
+      if (!newEntryCheck.checked) { ok = false; problems.push('double-check your name spelling against the roster, or check "I\'m new"'); }
     } else { // 'none'
       rosterMsgEl.textContent = `We don't see "${first} ${last}" on this season's list yet. If you're new to the pool, check the box below to confirm and continue -- we'll get you added.`;
       rosterMsgEl.style.display = 'block';
-      newEntrantLabel.style.display = 'block';
-      if (!newEntrantCheck.checked) { ok = false; problems.push('confirm you\'re new to the pool (check the box), or fix your name to match the roster'); }
+      newEntryLabel.style.display = 'block';
+      if (!newEntryCheck.checked) { ok = false; problems.push('confirm you\'re new to the pool (check the box), or fix your name to match the roster'); }
     }
   } else {
     rosterMsgEl.style.display = 'none';
-    newEntrantLabel.style.display = 'none';
+    newEntryLabel.style.display = 'none';
   }
 
   const { data, allSelections } = collectPicks();
@@ -652,7 +661,7 @@ document.getElementById('submitBtn').addEventListener('click', () => {
 
 document.getElementById('submitOnlineBtn').addEventListener('click', () => {
   // Re-validate here too — a "Review" pass earlier doesn't guarantee the
-  // fields are still filled in if the entrant went back and cleared
+  // fields are still filled in if the entry went back and cleared
   // something before clicking Submit.
   if (!validate()) {
     document.getElementById('validationErr').scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -661,14 +670,14 @@ document.getElementById('submitOnlineBtn').addEventListener('click', () => {
   const btn = document.getElementById('submitOnlineBtn');
   const { first, last, full: name } = getNameParts();
   const { data } = collectPicks();
-  const newEntrantCheck = document.getElementById('newEntrantCheck');
+  const newEntryCheck = document.getElementById('newEntryCheck');
 
   const payload = {
     secret: SUBMIT_SECRET, tournament: TOURNAMENT_ID,
-    entrantName: name, firstName: first, lastName: last,
-    // Flagged when the entrant checked "I'm new" past the roster check -- lets whoever's
+    entryName: name, firstName: first, lastName: last,
+    // Flagged when the entry checked "I'm new" past the roster check -- lets whoever's
     // reviewing submissions know to add them to next season's approved list.
-    isNew: (newEntrantCheck && newEntrantCheck.checked) ? "Yes" : ""
+    isNew: (newEntryCheck && newEntryCheck.checked) ? "Yes" : ""
   };
   groupNames.forEach(g => {
     const key = g.replace(/\s+/g, '');
@@ -694,7 +703,7 @@ document.getElementById('submitOnlineBtn').addEventListener('click', () => {
     btn.textContent = '✅ Submitted — check the sheet to confirm';
     document.getElementById('saveRecordSection').style.display = 'block';
     // Give the sheet a moment, then eagerly refresh the Who's Submitted list so
-    // it has a head start by the time the entrant switches tabs to check it.
+    // it has a head start by the time the entry switches tabs to check it.
     setTimeout(refreshSubmitted, 60 * 1000);
   }).catch(() => {
     btn.disabled = false;

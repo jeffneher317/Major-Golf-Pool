@@ -67,10 +67,12 @@
   .sc-head .sub{font-size:.72rem; opacity:.9; margin-top:2px;}
   .sc-card table{font-size:.78rem;}
   .sc-card th{position:static; font-size:.68rem;}
-  .sc-rank{
-    display:block; font-size:.62rem; font-weight:700; color:var(--gold);
-    letter-spacing:.02em; margin-top:1px;
+  .sc-rank-row th{
+    background:#fff; color:var(--gold); font-size:.62rem; font-weight:700;
+    letter-spacing:.02em; text-transform:none; padding:1px 10px 6px; cursor:default;
+    border-bottom:1px solid var(--border);
   }
+  .sc-rank-row th.sc-rank-label{text-align:right; padding-right:12px; color:var(--gold);}
   .cut{color:var(--red); font-weight:600;}
   .locked-badge{
     display:inline-block; background:var(--lightred); color:var(--red); font-size:.68rem;
@@ -160,20 +162,20 @@
     <div class="tab" data-panel="tiebreakers">Tiebreakers</div>
   </div>
 
-  <div class="panel active" id="panel-overall"><div class="card"><table id="tbl-overall"></table><div class="note" id="tbl-overall-note" style="display:none;">* = live running total (best 5 of however many of that entrant's picks have posted so far) -- not final until 5+ have scores.</div></div></div>
+  <div class="panel active" id="panel-overall"><div class="card"><table id="tbl-overall"></table><div class="note" id="tbl-overall-note" style="display:none;">* = live running total (best 5 of however many of that entry's picks have posted so far) -- not final until 5+ have scores.</div></div></div>
   <div class="panel" id="panel-day1"><div class="card"><table id="tbl-day1"></table><div class="note" id="tbl-day1-note" style="display:none;">* = live running total (best 10 of however many have posted so far) -- not final until 10+ have scores.</div></div></div>
   <div class="panel" id="panel-day2"><div class="card"><table id="tbl-day2"></table><div class="note" id="tbl-day2-note" style="display:none;">* = live running total (best 10 of however many have posted so far) -- not final until 10+ have scores.</div></div></div>
   <div class="panel" id="panel-day3"><div class="card"><table id="tbl-day3"></table><div class="note" id="tbl-day3-note" style="display:none;">* = live running total (best 5 of however many have posted so far) -- not final until 5+ have scores.</div></div></div>
   <div class="panel" id="panel-day4"><div class="card"><table id="tbl-day4"></table><div class="note" id="tbl-day4-note" style="display:none;">* = live running total (best 5 of however many have posted so far) -- not final until 5+ have scores.</div></div></div>
   <div class="panel" id="panel-scorecards">
-    <input type="text" class="searchbox" id="scSearch" placeholder="Search entrant name…">
-    <div class="note">Every entrant's 15 picks, live round-by-round scores (vs. par), and running total. <span class="live-mark" style="background:var(--lightgold); padding:1px 6px; border-radius:4px; color:var(--text); font-weight:700;">highlighted</span> scores are the ones actually counting toward that column's total right now.</div>
+    <input type="text" class="searchbox" id="scSearch" placeholder="Search entry name…">
+    <div class="note">Every entry's 15 picks, live round-by-round scores (vs. par), and running total. <span class="live-mark" style="background:var(--lightgold); padding:1px 6px; border-radius:4px; color:var(--text); font-weight:700;">highlighted</span> scores are the ones actually counting toward that column's total right now.</div>
     <div class="scorecard-grid" id="scorecardGrid"></div>
   </div>
   <div class="panel" id="panel-tiebreakers">
     <div class="note">Only payout-relevant ties show here: the Daily winner (Day 1-4, populates once that
       round is final), and Overall places 1-<span id="tb-payout-spots-note"></span> (live, updates as
-      scores come in). Resolved per the season rules: compare each tied entrant's next-best
+      scores come in). Resolved per the season rules: compare each tied entry's next-best
       pick beyond the ones that count (11th pick for Day 1/2, 6th pick for Day 3/4/Overall), lowest
       score wins that level, repeat until broken. If all 15 picks tie, the spot(s) split. Each card has
       a starter paragraph you can copy into the results email and dress up.</div>
@@ -572,19 +574,18 @@ function fmtStanding(e) {
 // Small rank badge for a scorecard column header (e.g. "R2" with "T5" underneath) -- blank until
 // that round/overall actually has a score for this entrant, so Day 2-4 stay empty pre-tournament
 // and only populate once live.
-function headerRankHtml(e, dayKey) {
+function rankLabel(e, dayKey) {
   if (e[dayKey] == null) return "";
   const info = e.ranks && e.ranks[dayKey];
   if (!info || info.rank == null) return "";
-  const label = info.tied ? "T" + info.rank : String(info.rank);
-  return `<br><span class="sc-rank">${label}</span>`;
+  return info.tied ? "T" + info.rank : String(info.rank);
 }
 
 /* ====================== rendering ====================== */
 function renderDayTable(tblId, ranked, dayKey, label) {
   const tbl = document.getElementById(tblId);
   const partialKey = dayKey + "Partial";
-  let html = `<thead><tr><th>Pos</th><th>Entrant</th><th class="num">${label}</th></tr></thead><tbody>`;
+  let html = `<thead><tr><th>Pos</th><th>Entry</th><th class="num">${label}</th></tr></thead><tbody>`;
   for (const e of ranked) {
     html += `<tr><td class="rankcell ${e.tied ? 'standing-tie' : ''}">${fmtStanding(e)}</td>` +
       `<td>${e.fullName}</td><td class="num">${fmtScoreLive(e[dayKey], e[partialKey])}</td></tr>`;
@@ -632,12 +633,16 @@ function renderScorecards(entrants) {
         <div class="sub">${e.locked ? "Submitted after picks locked (" + e.submittedAt + ") -- picks not counted." : "Day1: " + fmtScoreLive(e.day1, e.day1Partial) + " &nbsp; Day2: " + fmtScoreLive(e.day2, e.day2Partial) + " &nbsp; Day3: " + fmtScoreLive(e.day3, e.day3Partial) + " &nbsp; Day4: " + fmtScoreLive(e.day4, e.day4Partial) + " &nbsp; Overall: " + fmtScoreLive(e.overall, e.overallPartial)}</div>
       </div>
       <table>
-        <thead><tr><th>Player</th>` +
-        `<th class="num">R1${headerRankHtml(e, "day1")}</th>` +
-        `<th class="num">R2${headerRankHtml(e, "day2")}</th>` +
-        `<th class="num">R3${headerRankHtml(e, "day3")}</th>` +
-        `<th class="num">R4${headerRankHtml(e, "day4")}</th>` +
-        `<th class="num">Total${headerRankHtml(e, "overall")}</th></tr></thead>
+        <thead>
+          <tr><th>Player</th><th class="num">R1</th><th class="num">R2</th><th class="num">R3</th><th class="num">R4</th><th class="num">Total</th></tr>
+          <tr class="sc-rank-row">` +
+            `<th class="sc-rank-label">Rank</th>` +
+            `<th class="num">${rankLabel(e, "day1")}</th>` +
+            `<th class="num">${rankLabel(e, "day2")}</th>` +
+            `<th class="num">${rankLabel(e, "day3")}</th>` +
+            `<th class="num">${rankLabel(e, "day4")}</th>` +
+            `<th class="num">${rankLabel(e, "overall")}</th></tr>
+        </thead>
         <tbody>${rows}${totalRow}</tbody>
       </table>`;
     grid.appendChild(div);
@@ -969,7 +974,7 @@ function renderTiebreakGroup(label, g, startRank, cfg) {
   const headerTag = isPendingOnly ? " — pending" : "";
   html += `<h3>${label} — ${totalCount}-way tie at rank ${startRank} (${fmtScore(g.score)})${headerTag}</h3>`;
   html += `<div class="tb-scoreline">Tied: ${g.entrants.map(e => e.fullName).join(", ")}</div>`;
-  html += `<table><thead><tr><th>Finish</th><th>Entrant</th><th>Decided by</th></tr></thead><tbody>`;
+  html += `<table><thead><tr><th>Finish</th><th>Entry</th><th>Decided by</th></tr></thead><tbody>`;
   let rank = startRank;
   let hiddenCount = 0;
   for (const cluster of g.clusters) {
@@ -1159,11 +1164,11 @@ async function refreshAll() {
     statusEl.textContent = "Last updated " + new Date().toLocaleTimeString();
     const lockedCount = entrantsRaw.filter(e => e.locked).length;
     const countNote = lockedCount > 0
-      ? (entrantsRaw.length - lockedCount) + " entrants loaded (" + lockedCount + " late submission" + (lockedCount === 1 ? "" : "s") + " excluded)."
-      : entrantsRaw.length + " entrants loaded.";
+      ? (entrantsRaw.length - lockedCount) + " entries loaded (" + lockedCount + " late submission" + (lockedCount === 1 ? "" : "s") + " excluded)."
+      : entrantsRaw.length + " entries loaded.";
     const lockNote = scoreData.lockTime
       ? " Picks locked as of " + scoreData.lockTime.display + " (first tee time)."
-      : " Picks remain open until Round 1 begins.";
+      : "";
     document.getElementById("footNote").textContent =
       countNote + " Scores pulled live from ESPN; refreshes automatically every " +
       Math.round(REFRESH_MS / 1000) + "s, or hit Refresh now." + lockNote;

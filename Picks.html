@@ -88,7 +88,7 @@
 <div id="gateOverlay">
   <div class="gateCard">
     <h2>🔒 Entry Password Required</h2>
-    <p>This pool is by invitation only. Enter the password shared with entrants to make your picks.</p>
+    <p>This pool is by invitation only. Enter the password shared with entries to make your picks.</p>
     <input type="password" id="gatePassword" placeholder="Password" autocomplete="off">
     <div class="gateErr" id="gateErr"></div>
     <button id="gateBtn" type="button">Enter</button>
@@ -170,7 +170,7 @@
 /* ====================== CONFIG — edit this each tournament ====================== */
 const TOURNAMENT_NAME = "2026 The Open Championship";
 const SEND_TO_EMAIL = "jeff.neher@gmail.com"; // change to whoever collects picks (e.g. Chip Brunt)
-const ENTRY_PASSWORD = "Birkdale2026"; // change this each tournament and share it with entrants only
+const ENTRY_PASSWORD = "Birkdale2026"; // change this each tournament and share it with entries only
 const GROUP_PICKS = {"Group A": 5, "Group B": 4, "Group C": 3, "Group D": 2, "Group E": 1}; // picks per group (15 total): 5-4-3-2-1 across Groups A-E
 const SUBMIT_URL = "https://script.google.com/macros/s/AKfycbxJp18dq8iLJzVAd-27eSvmZPJeGX-ERJxiHK3-aF0-v84_02ZheefVgIzAW4gxNCJOHw/exec"; // same Web App URL all year, shared by every tournament's form
 const SUBMIT_SECRET = "Majors2026"; // must exactly match SHARED_SECRET in the Apps Script — same all year
@@ -276,7 +276,7 @@ if (new URLSearchParams(window.location.search).get('autofill') === 'jeff') {
     if (!document.getElementById('firstName').value.trim() && !document.getElementById('lastName').value.trim()) {
       const n = Math.floor(Math.random() * 10000);
       document.getElementById('firstName').value = 'Test';
-      document.getElementById('lastName').value = 'Entrant ' + n;
+      document.getElementById('lastName').value = 'Entry ' + n;
     }
     groupNames.forEach(g => {
       const shuffled = GROUPS[g].slice();
@@ -420,7 +420,7 @@ document.getElementById('submitBtn').addEventListener('click', () => {
 
 document.getElementById('submitOnlineBtn').addEventListener('click', () => {
   // Re-validate here too — a "Review" pass earlier doesn't guarantee the
-  // fields are still filled in if the entrant went back and cleared
+  // fields are still filled in if the entry went back and cleared
   // something before clicking Submit.
   if (!validate()) {
     document.getElementById('validationErr').scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -432,7 +432,7 @@ document.getElementById('submitOnlineBtn').addEventListener('click', () => {
 
   const payload = {
     secret: SUBMIT_SECRET, tournament: TOURNAMENT_ID,
-    entrantName: name, firstName: first, lastName: last, alias: alias
+    entryName: name, firstName: first, lastName: last, alias: alias
   };
   groupNames.forEach(g => {
     const key = g.replace(/\s+/g, '');
