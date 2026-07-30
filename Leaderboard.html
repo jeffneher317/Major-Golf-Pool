@@ -94,7 +94,8 @@
     padding:14px 16px; margin-bottom:14px;
   }
   .tb-group h3{margin:0 0 6px; font-size:1rem; color:var(--green-dark);}
-  .tb-group .tb-split h3{color:var(--red);}
+  .tb-group.tb-split h3{color:var(--red);}
+  .tb-group.tb-pending h3{color:var(--gold);}
   .tb-scoreline{font-size:.82rem; color:#556; margin-bottom:10px;}
   .tb-group table{margin:8px 0 12px; font-size:.8rem;}
   .tb-group table th, .tb-group table td{border:1px solid var(--border); padding:4px 8px; text-align:center;}
@@ -113,8 +114,9 @@
   .tb-none{text-align:center; color:#889; font-size:.85rem; padding:20px 0;}
   .tb-scorecards{margin:12px 0 6px;}
   .sc-card td.tb-decider{
-    background:#dbe9fb; font-weight:700; border-radius:4px; box-shadow:inset 0 0 0 1px #6f9ce0;
+    font-weight:700; border-radius:4px; box-shadow:inset 0 0 0 2px #3b6fd4;
   }
+  .sc-card td.tb-decider:not(.counted){background:#dbe9fb;}
   .tb-legend{
     font-size:.72rem; color:#667; margin:0 0 14px; display:flex; gap:16px;
     flex-wrap:wrap; justify-content:center;
@@ -182,7 +184,7 @@ const PAR = 70;
 const REFRESH_MS = 90 * 1000; // how often to auto re-pull live data
 const GROUP_PICKS = {"Group A": 5, "Group B": 4, "Group C": 3, "Group D": 2, "Group E": 1}; // 15 total picks per entrant
 const POOL_TIMEZONE = "America/New_York"; // must match the Google Sheet's configured timezone (Submitted At column)
-const OVERALL_PAYOUT_SPOTS = 6; // how many Overall places get paid -- bump this up as the pool grows
+const OVERALL_PAYOUT_SPOTS = 5; // how many Overall places get paid, per the rules doc -- bump this up as the pool grows
 /* =================================================================================== */
 
 /* ---- Picks TSV column layout (0-indexed), matches the Google Sheet / Apps Script schema ---- */
@@ -699,11 +701,65 @@ function orderTiedGroup(tiedEntrants, valuesKey, n) {
   return clusters;
 }
 
+// Overall tiebreak, per the rules doc ("How does the Tiebreaker work for the overall?"):
+//  Step 1 -- compare the tied entrants' best-5 values directly against each other, position by
+//    position (lowest vs. lowest, 2nd-lowest vs. 2nd-lowest, ... 5th vs. 5th). This does NOT
+//    reach into picks 6-15 -- it's a direct compare of the same 5 values that make up the total.
+//  Step 2 -- only if all 5 positions match exactly, fall back to the FINAL ROUND's (Round 4)
+//    individual scores across all 15 picks, sorted and compared position by position. Only
+//    meaningful once Round 4 is actually complete -- if it's not, the tie is "pending" rather
+//    than resolved or split.
+//  Step 3 -- still tied after that -> split.
+function compareOverallEntrants(a, b, round4Complete) {
+  for (let i = 0; i < 5; i++) {
+    const av = a.top5[i], bv = b.top5[i];
+    const aHas = typeof av === "number", bHas = typeof bv === "number";
+    if (!aHas && !bHas) continue;
+    if (!aHas) return { cmp: 1, step: 1, level: i + 1 };
+    if (!bHas) return { cmp: -1, step: 1, level: i + 1 };
+    if (av !== bv) return { cmp: av - bv, step: 1, level: i + 1 };
+  }
+  if (!round4Complete) return { cmp: 0, step: null, level: null, pending: true };
+  for (let i = 0; i < 15; i++) {
+    const av = a.r4sorted[i], bv = b.r4sorted[i];
+    const aHas = typeof av === "number", bHas = typeof bv === "number";
+    if (!aHas && !bHas) continue;
+    if (!aHas) return { cmp: 1, step: 2, level: i + 1 };
+    if (!bHas) return { cmp: -1, step: 2, level: i + 1 };
+    if (av !== bv) return { cmp: av - bv, step: 2, level: i + 1 };
+  }
+  return { cmp: 0, step: null, level: null, pending: false };
+}
+
+function orderOverallTiedGroup(tiedEntrants, round4Complete) {
+  const withSorted = tiedEntrants.map(e => {
+    const lt = e.slots.map(s => s.liveTotal).filter(v => typeof v === "number").sort((a, b) => a - b);
+    const r4 = e.slots.map(s => s.r4).filter(v => typeof v === "number").sort((a, b) => a - b);
+    return { entrant: e, top5: lt.slice(0, 5), r4sorted: r4 };
+  });
+  withSorted.sort((a, b) => compareOverallEntrants(a, b, round4Complete).cmp);
+  const rows = withSorted.map((w, i) => {
+    let decidingLevel = null, decidingStep = null, splitWithPrev = false, pending = false;
+    if (i > 0) {
+      const c = compareOverallEntrants(withSorted[i - 1], w, round4Complete);
+      if (c.cmp !== 0) { decidingLevel = c.level; decidingStep = c.step; }
+      else { splitWithPrev = true; pending = !!c.pending; }
+    }
+    return { entrant: w.entrant, top5: w.top5, r4sorted: w.r4sorted, decidingLevel, decidingStep, splitWithPrev, pending };
+  });
+  const clusters = [];
+  for (const row of rows) {
+    if (row.splitWithPrev && clusters.length) clusters[clusters.length - 1].push(row);
+    else clusters.push([row]);
+  }
+  return clusters;
+}
+
 // Finds every group of entrants tied on a given day/overall total, restricted to groups whose
 // rank falls at or before maxRank (e.g. only the rank-1 group for Daily; ranks 1..payout spots
 // for Overall). A group starting below maxRank is still included in full even if it runs past
 // maxRank, since resolving it is exactly what decides who makes it into the paid spots.
-function computeTiebreakGroups(computed, dayKey, n, valuesKey, maxRank) {
+function computeTiebreakGroups(computed, dayKey, n, valuesKey, maxRank, isOverall, round4Complete) {
   const ranked = rankWithTies(computed, dayKey);
   const groups = [];
   let i = 0;
@@ -713,7 +769,8 @@ function computeTiebreakGroups(computed, dayKey, n, valuesKey, maxRank) {
       const group = [];
       let j = i;
       while (j < ranked.length && ranked[j][dayKey] === score) { group.push(ranked[j]); j++; }
-      groups.push({ rank: ranked[i].rank, score, entrants: group, clusters: orderTiedGroup(group, valuesKey, n) });
+      const clusters = isOverall ? orderOverallTiedGroup(group, round4Complete) : orderTiedGroup(group, valuesKey, n);
+      groups.push({ rank: ranked[i].rank, score, entrants: group, clusters });
       i = j;
     } else {
       i++;
@@ -750,26 +807,60 @@ function groupMaxLevel(g, n) {
 
 const TB_IDX_KEY = { r1: "day1Idx", r2: "day2Idx", r3: "day3Idx", r4: "day4Idx", liveTotal: "overallIdx" };
 
+// Given a row's own decidingLevel (its own rank position that separated it from the entrant
+// ranked just above it) and which values array it lives in, finds that specific slot index.
+function deciderIndexForRow(values, decidingLevel) {
+  if (!decidingLevel) return null;
+  const set = indicesInRange(values, decidingLevel, decidingLevel);
+  return set.size ? [...set][0] : null;
+}
+
 // Full scorecards (same Player/R1/R2/R3/R4/Total grid as the Scorecards tab) for just the tied
 // entrants, side by side. Gold = counted toward the base total (best N). Blue = the tiebreak
-// pick(s) actually in play for this group, on whichever column matches this tie type (R1 for a
-// Day 1 tie, Total for an Overall tie, etc.) -- so it's visually obvious why one entrant beat
-// another.
+// pick(s) actually in play.
+//  - Daily groups: blue spans the whole comparison range (picks N+1 through however deep the
+//    group needed to go), on the relevant round's column, same for every entrant in the group.
+//  - Overall groups: blue marks just the ONE cell that decided each entrant's spot relative to
+//    the entrant ranked just above them -- on the Total column if it was decided by Step 1 (a
+//    direct compare of the counted best-5 values), or on the R4 column if it fell back to Step 2
+//    (Round 4 individual scores across all 15 picks).
 function renderTiebreakScorecards(g, cfg) {
-  const maxLevel = groupMaxLevel(g, cfg.n);
+  const isOverall = cfg.label === "Overall";
+  const maxLevel = isOverall ? null : groupMaxLevel(g, cfg.n);
+  const rowByEntrant = new Map();
+  if (isOverall) {
+    for (const cluster of g.clusters) for (const row of cluster) rowByEntrant.set(row.entrant, row);
+  }
   let html = `<div class="scorecard-grid tb-scorecards">`;
   for (const e of g.entrants) {
-    const values = e.slots.map(s => s[cfg.valuesKey]);
-    const deciderSet = indicesInRange(values, cfg.n + 1, maxLevel);
+    let deciderCol = null, deciderIdx = null;
+    if (isOverall) {
+      const row = rowByEntrant.get(e);
+      if (row && row.decidingLevel) {
+        if (row.decidingStep === 1) {
+          deciderCol = "liveTotal";
+          deciderIdx = deciderIndexForRow(e.slots.map(s => s.liveTotal), row.decidingLevel);
+        } else if (row.decidingStep === 2) {
+          deciderCol = "r4";
+          deciderIdx = deciderIndexForRow(e.slots.map(s => s.r4), row.decidingLevel);
+        }
+      }
+    } else {
+      var deciderSet = indicesInRange(e.slots.map(s => s[cfg.valuesKey]), cfg.n + 1, maxLevel);
+    }
     let rows = "";
     e.slots.forEach((s, idx) => {
       const isCutOrWd = s.total === "CUT" || s.total === "WD";
       const cls = { r1: "", r2: "", r3: "", r4: "", liveTotal: "" };
       for (const k of ["r1", "r2", "r3", "r4", "liveTotal"]) {
         const idxSet = e[TB_IDX_KEY[k]];
-        if (idxSet && idxSet.has(idx)) cls[k] = "counted";
+        if (idxSet && idxSet.has(idx)) cls[k] += "counted";
       }
-      if (!cls[cfg.valuesKey] && deciderSet.has(idx)) cls[cfg.valuesKey] = "tb-decider";
+      if (isOverall) {
+        if (deciderCol && idx === deciderIdx) cls[deciderCol] = (cls[deciderCol] + " tb-decider").trim();
+      } else if (deciderSet.has(idx)) {
+        cls[cfg.valuesKey] = (cls[cfg.valuesKey] + " tb-decider").trim();
+      }
       const totalDisplay = isCutOrWd ? s.total : fmtScore(s.liveTotal);
       rows += `<tr><td>${s.name}${s.found ? "" : ' <span class="cut">(no live match)</span>'}</td>` +
         `<td class="num ${cls.r1}">${fmtScore(s.r1)}</td><td class="num ${cls.r2}">${fmtScore(s.r2)}</td>` +
@@ -783,27 +874,47 @@ function renderTiebreakScorecards(g, cfg) {
     </div>`;
   }
   html += `</div>`;
+  const deciderLabel = isOverall
+    ? "Deciding pick (Total = Step 1 compare, R4 = Step 2 Round 4 fallback)"
+    : "Tiebreaker pick(s) in play";
   html += `<div class="tb-legend"><span><i class="sw-counted"></i>Counted toward the base total (best ${cfg.n})</span>` +
-    `<span><i class="sw-decider"></i>Tiebreaker pick(s) in play</span></div>`;
+    `<span><i class="sw-decider"></i>${deciderLabel}</span></div>`;
   return html;
 }
 
+function describeDecision(row, isOverall) {
+  if (!row.decidingLevel) {
+    if (row.pending) return "still tied on best 5 -- pending Round 4";
+    return "still tied through all 15";
+  }
+  if (isOverall && row.decidingStep === 1) {
+    return `${ordinal(row.decidingLevel)} best pick (${fmtScore(row.top5[row.decidingLevel - 1])})`;
+  }
+  if (isOverall && row.decidingStep === 2) {
+    return `Round 4, ${ordinal(row.decidingLevel)} best score (${fmtScore(row.r4sorted[row.decidingLevel - 1])})`;
+  }
+  return `${ordinal(row.decidingLevel)} pick (${fmtScore(row.sorted[row.decidingLevel - 1])})`;
+}
+
 function renderTiebreakGroup(label, g, startRank, cfg) {
+  const isOverall = label === "Overall";
   const totalCount = g.entrants.length;
-  const isSplitOnly = g.clusters.length === 1; // nobody separated at all -- everyone stays tied
-  let html = `<div class="tb-group ${isSplitOnly ? "tb-split" : ""}">`;
-  html += `<h3>${label} — ${totalCount}-way tie at rank ${startRank} (${fmtScore(g.score)})</h3>`;
+  const isPendingOnly = isOverall && g.clusters.length === 1 && g.clusters[0].some(r => r.pending);
+  const isSplitOnly = g.clusters.length === 1 && !isPendingOnly; // nobody separated at all -- everyone stays tied
+  let html = `<div class="tb-group ${isSplitOnly ? "tb-split" : ""} ${isPendingOnly ? "tb-pending" : ""}">`;
+  const headerTag = isPendingOnly ? " — pending Round 4" : "";
+  html += `<h3>${label} — ${totalCount}-way tie at rank ${startRank} (${fmtScore(g.score)})${headerTag}</h3>`;
   html += `<div class="tb-scoreline">Tied: ${g.entrants.map(e => e.fullName).join(", ")}</div>`;
   html += `<table><thead><tr><th>Finish</th><th>Entrant</th><th>Decided by</th></tr></thead><tbody>`;
   let rank = startRank;
   for (const cluster of g.clusters) {
+    const clusterPending = isOverall && cluster.some(r => r.pending);
     const placeLabel = cluster.length > 1
-      ? `${ordinal(rank)}-${ordinal(rank + cluster.length - 1)} (split)`
+      ? `${ordinal(rank)}-${ordinal(rank + cluster.length - 1)} ${clusterPending ? "(pending)" : "(split)"}`
       : ordinal(rank);
     for (let k = 0; k < cluster.length; k++) {
       const row = cluster[k];
-      const decidedBy = row.decidingLevel ? `${ordinal(row.decidingLevel)} pick (${fmtScore(row.sorted[row.decidingLevel - 1])})` :
-        (k === 0 ? (rank === startRank ? "—" : "still tied through all 15") : "still tied through all 15");
+      const decidedBy = k === 0 && rank === startRank ? "—" : describeDecision(row, isOverall);
       html += `<tr><td class="${k === 0 ? "tb-winner-cell" : ""}">${k === 0 ? placeLabel : ""}</td>` +
         `<td>${row.entrant.fullName}</td><td>${decidedBy}</td></tr>`;
     }
@@ -847,12 +958,20 @@ function buildTiebreakWriteup(label, g, startRank) {
   let rank = startRank;
   for (const cluster of g.clusters) {
     if (cluster.length > 1) {
-      text += `${ordinal(rank)}-${ordinal(rank + cluster.length - 1)}: ${namesJoin(cluster.map(r => r.entrant.fullName))} are tied even ` +
-        `after comparing all 15 picks -- these spots split evenly.\n`;
+      const first = cluster[0];
+      if (first.pending) {
+        text += `${ordinal(rank)}-${ordinal(rank + cluster.length - 1)}: ${namesJoin(cluster.map(r => r.entrant.fullName))} are tied on their best 5 -- ` +
+          `still pending, will be settled by Round 4 individual scores once the final round is complete.\n`;
+      } else {
+        text += `${ordinal(rank)}-${ordinal(rank + cluster.length - 1)}: ${namesJoin(cluster.map(r => r.entrant.fullName))} are tied even ` +
+          `after both tiebreaker steps -- these spots split evenly.\n`;
+      }
     } else {
       const row = cluster[0];
-      if (row.decidingLevel) {
-        text += `${ordinal(rank)} Place goes to ${row.entrant.fullName}, deciding on their ${ordinal(row.decidingLevel)} best player's score (${fmtScore(row.sorted[row.decidingLevel - 1])}).\n`;
+      if (row.decidingLevel && row.decidingStep === 1) {
+        text += `${ordinal(rank)} Place goes to ${row.entrant.fullName}, deciding on their ${ordinal(row.decidingLevel)} best player's score (${fmtScore(row.top5[row.decidingLevel - 1])}).\n`;
+      } else if (row.decidingLevel && row.decidingStep === 2) {
+        text += `${ordinal(rank)} Place goes to ${row.entrant.fullName} -- tied on the best 5, broken by Round 4's ${ordinal(row.decidingLevel)} best individual score (${fmtScore(row.r4sorted[row.decidingLevel - 1])}).\n`;
       } else {
         text += `${ordinal(rank)} Place goes to ${row.entrant.fullName}.\n`;
       }
@@ -876,16 +995,19 @@ function renderTiebreakers(computed, scoreData) {
   ];
   for (const cfg of DAILY_CONFIG) {
     if (!isRoundComplete(scoreData.map, cfg.roundNum)) continue; // don't populate until the round is final
-    const groups = computeTiebreakGroups(computed, cfg.key, cfg.n, cfg.valuesKey, 1);
+    const groups = computeTiebreakGroups(computed, cfg.key, cfg.n, cfg.valuesKey, 1, false, false);
     for (const g of groups) {
       anyTies = true;
       html += renderTiebreakGroup(cfg.label, g, g.rank, cfg);
     }
   }
 
-  // --- Overall: ranks 1..OVERALL_PAYOUT_SPOTS, live ---
+  // --- Overall: ranks 1..OVERALL_PAYOUT_SPOTS, live. Step 2 of the tiebreak (Round 4 individual
+  // scores) only kicks in once Round 4 is actually complete -- before that, a tie left unresolved
+  // by Step 1 shows as "pending" rather than a false split.
+  const round4Complete = isRoundComplete(scoreData.map, 4);
   const overallCfg = { label: "Overall", n: 5, valuesKey: "liveTotal" };
-  const overallGroups = computeTiebreakGroups(computed, "overall", overallCfg.n, overallCfg.valuesKey, OVERALL_PAYOUT_SPOTS);
+  const overallGroups = computeTiebreakGroups(computed, "overall", overallCfg.n, overallCfg.valuesKey, OVERALL_PAYOUT_SPOTS, true, round4Complete);
   for (const g of overallGroups) {
     anyTies = true;
     html += renderTiebreakGroup("Overall", g, g.rank, overallCfg);
