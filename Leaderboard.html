@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rocket Classic (TEST) — Live Leaderboard</title>
+<style>
+  :root{
+    --green:#155724; --green-dark:#0d3a19; --gold:#c9a227; --bg:#f4f6f4;
+    --card:#ffffff; --border:#d7ddd7; --red:#b3261e; --text:#1b1f1b;
+    --lightgreen:#e6f4ea; --lightgold:#fdf3d0; --lightred:#fbeaea; --lightgray:#f4f6f4;
+  }
+  *{box-sizing:border-box;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg); color:var(--text); margin:0; padding:0 0 60px;
+  }
+  header{
+    background:linear-gradient(135deg,var(--green-dark),var(--green));
+    color:#fff; padding:24px 20px 18px; text-align:center;
+  }
+  header h1{margin:0 0 6px; font-size:1.5rem;}
+  header p{margin:0; opacity:.9; font-size:.9rem;}
+  .wrap{max-width:1000px; margin:0 auto; padding:16px;}
+  .statusbar{
+    display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:10px;
+    font-size:.8rem; color:#556; text-align:center; margin:10px 0 4px;
+  }
+  .statusbar button{
+    background:#fff; border:1px solid var(--border); color:var(--green-dark);
+    padding:6px 12px; border-radius:6px; font-size:.8rem; font-weight:600; cursor:pointer;
+  }
+  .statusbar button:hover{background:var(--lightgreen);}
+  #dataError{
+    display:none; background:var(--lightred); color:var(--red); border:1px solid #f0c9c6;
+    padding:10px 14px; border-radius:6px; font-size:.85rem; margin:10px 0; text-align:left;
+    white-space:pre-wrap;
+  }
+  .tabs{display:flex; gap:6px; flex-wrap:wrap; margin:14px 0; justify-content:center;}
+  .tab{
+    background:#fff; border:1px solid var(--border); color:#556; padding:8px 16px;
+    border-radius:20px; font-size:.85rem; font-weight:600; cursor:pointer;
+  }
+  .tab.active{background:var(--green); border-color:var(--green); color:#fff;}
+  .panel{display:none;}
+  .panel.active{display:block;}
+  .card{
+    background:var(--card); border:1px solid var(--border); border-radius:10px;
+    padding:16px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,.04);
+  }
+  table{width:100%; border-collapse:collapse; font-size:.85rem;}
+  th,td{padding:8px 10px; text-align:left; border-bottom:1px solid var(--border);}
+  th{
+    background:var(--green); color:#fff; font-size:.75rem; text-transform:uppercase;
+    letter-spacing:.03em; cursor:pointer; user-select:none; position:sticky; top:0;
+  }
+  th.num, td.num{text-align:right;}
+  tr:nth-child(even) td{background:#fafbfa;}
+  .rankcell{font-weight:700; color:var(--green-dark); width:44px;}
+  .standing-tie{color:var(--gold); font-weight:600;}
+  .me-row td{background:var(--lightgold) !important;}
+  .scorecard-grid{display:grid; grid-template-columns:1fr; gap:14px;}
+  @media(min-width:820px){ .scorecard-grid{grid-template-columns:1fr 1fr;} }
+  .sc-card{border:1px solid var(--border); border-radius:8px; overflow:hidden;}
+  .sc-head{background:var(--green); color:#fff; padding:8px 12px;}
+  .sc-head .nm{font-weight:700; font-size:.95rem;}
+  .sc-head .sub{font-size:.72rem; opacity:.9; margin-top:2px;}
+  .sc-card table{font-size:.78rem;}
+  .sc-card th{position:static; font-size:.68rem;}
+  .cut{color:var(--red); font-weight:600;}
+  .searchbox{
+    width:100%; max-width:320px; padding:8px 10px; border:1px solid var(--border);
+    border-radius:6px; font-size:.9rem; margin:0 auto 14px; display:block;
+  }
+  .note{font-size:.78rem; color:#667; line-height:1.4; text-align:center; margin:6px 0 14px;}
+  .spin{
+    display:inline-block; width:12px; height:12px; border:2px solid #cdd; border-top-color:var(--green);
+    border-radius:50%; animation:spin 0.8s linear infinite; vertical-align:middle; margin-right:4px;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+</style>
+</head>
+<body>
+
+<header>
+  <h1 id="pageTitle">Rocket Classic (TEST) — Live Leaderboard</h1>
+  <p id="eventSub">Detroit Golf Club</p>
+</header>
+
+<div class="wrap">
+
+  <div class="statusbar">
+    <span id="lastUpdated">Loading…</span>
+    <button id="refreshBtn" type="button">↻ Refresh now</button>
+  </div>
+  <div id="dataError"></div>
+
+  <div class="tabs" id="tabs">
+    <div class="tab active" data-panel="overall">Overall</div>
+    <div class="tab" data-panel="day1">Day 1</div>
+    <div class="tab" data-panel="day2">Day 2</div>
+    <div class="tab" data-panel="day3">Day 3</div>
+    <div class="tab" data-panel="day4">Day 4</div>
+    <div class="tab" data-panel="scorecards">Scorecards</div>
+  </div>
+
+  <div class="panel active" id="panel-overall"><div class="card"><table id="tbl-overall"></table></div></div>
+  <div class="panel" id="panel-day1"><div class="card"><table id="tbl-day1"></table></div></div>
+  <div class="panel" id="panel-day2"><div class="card"><table id="tbl-day2"></table></div></div>
+  <div class="panel" id="panel-day3"><div class="card"><table id="tbl-day3"></table></div></div>
+  <div class="panel" id="panel-day4"><div class="card"><table id="tbl-day4"></table></div></div>
+  <div class="panel" id="panel-scorecards">
+    <input type="text" class="searchbox" id="scSearch" placeholder="Search entrant name…">
+    <div class="note">Every entrant's 15 picks, live round-by-round scores (vs. par), and running total.</div>
+    <div class="scorecard-grid" id="scorecardGrid"></div>
+  </div>
+
+  <p class="note" id="footNote"></p>
+</div>
+
+<script>
+/* ====================== CONFIG — edit this each tournament ====================== */
+const TOURNAMENT_NAME = "Rocket Classic (TEST) — Detroit Golf Club";
+const PICKS_TSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vScRxv9AHrLvuftk8SFvhqdsQaENzrTydEgKbG7ow_ii56TNm7uKcJoO9maExpeERnsBCY5xzzvibdS/pub?gid=14865622&single=true&output=tsv";
+const ESPN_EVENT_ID = "401811960"; // ESPN's internal event id for this tournament -- from their /scoreboard?dates=YYYY calendar
+const PAR = 70;
+const REFRESH_MS = 90 * 1000; // how often to auto re-pull live data
+const GROUP_PICKS = {"Group A": 5, "Group B": 4, "Group C": 3, "Group D": 2, "Group E": 1}; // 15 total picks per entrant
+/* =================================================================================== */
+
+/* ---- Picks TSV column layout (0-indexed), matches the Google Sheet / Apps Script schema ---- */
+const COL = {
+  name: 0,
+  groupA: [1,2,3,4,5], groupAAlt: 6,
+  groupB: [7,8,9,10], groupBAlt: 11,
+  groupC: [12,13,14], groupCAlt: 15,
+  groupD: [16,17], groupDAlt: 18,
+  groupE: [19], groupEAlt: 20,
+  submittedAt: 21,
+  lastName: 22,
+};
+const SLOTS = [ // (pick column, alt column) for each of the 15 pick "slots", in Scoring-tab order
+  ...COL.groupA.map(c => [c, COL.groupAAlt]),
+  ...COL.groupB.map(c => [c, COL.groupBAlt]),
+  ...COL.groupC.map(c => [c, COL.groupCAlt]),
+  ...COL.groupD.map(c => [c, COL.groupDAlt]),
+  ...COL.groupE.map(c => [c, COL.groupEAlt]),
+];
+
+/* ====================== small utilities ====================== */
+function normalizeName(s) {
+  // Strips accents (Séamus -> Seamus) via NFD decomposition, PLUS a manual table for Nordic/
+  // other letters that are their own distinct Unicode code points rather than base+diacritic
+  // (ø, æ, å, etc. don't decompose under NFD -- "Højgaard" would stay "højgaard" without this).
+  // Also strips periods/commas and collapses whitespace. Used on BOTH sides (Picks names and
+  // ESPN names) so accented and plain-ASCII spellings of the same golfer line up.
+  if (!s) return "";
+  const manualMap = { "ø":"o","Ø":"o","æ":"ae","Æ":"ae","å":"a","Å":"a","ß":"ss",
+    "ð":"d","Ð":"d","þ":"th","Þ":"th","đ":"d","Đ":"d","ł":"l","Ł":"l" };
+  let out = s.normalize("NFD").replace(/[̀-ͯ]/g, "");
+  out = out.replace(/[øØæÆåÅßðÐþÞđĐłŁ]/g, ch => manualMap[ch] || ch);
+  return out.replace(/[.,]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function parseTSV(text) {
+  const lines = text.replace(/\r/g, "").split("\n").filter(l => l.length > 0);
+  if (lines.length < 2) return [];
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    rows.push(lines[i].split("\t"));
+  }
+  return rows;
+}
+
+function showError(msg) {
+  const box = document.getElementById("dataError");
+  box.style.display = "block";
+  box.textContent = msg;
+}
+function clearError() {
+  document.getElementById("dataError").style.display = "none";
+}
+
+/* ====================== fetch: picks ====================== */
+async function fetchPicks() {
+  const res = await fetch(PICKS_TSV_URL, { cache: "no-store" });
+  if (!res.ok) throw new Error("Could not load picks (HTTP " + res.status + ")");
+  const text = await res.text();
+  const rows = parseTSV(text);
+
+  // Group by normalized (last+first) name, keep only the latest submission per entrant --
+  // this is a simplified stand-in for Workbook A's full duplicate/late-approval workflow,
+  // which involves a manual review step that doesn't make sense for a fully-automatic public page.
+  const byEntrant = new Map();
+  for (const r of rows) {
+    const fullName = (r[COL.name] || "").trim();
+    if (!fullName) continue;
+    const lastName = (r[COL.lastName] || "").trim();
+    const firstName = lastName && fullName.endsWith(lastName)
+      ? fullName.slice(0, fullName.length - lastName.length).trim()
+      : fullName;
+    const key = normalizeName(lastName) + "|" + normalizeName(firstName);
+    const submittedAt = r[COL.submittedAt] || "";
+    const existing = byEntrant.get(key);
+    if (!existing || submittedAt > existing.submittedAt) {
+      const picks = SLOTS.map(([pickCol, altCol]) => ({
+        primary: (r[pickCol] || "").trim(),
+        alt: (r[altCol] || "").trim(),
+      }));
+      byEntrant.set(key, { fullName, lastName, firstName, submittedAt, picks });
+    }
+  }
+  return Array.from(byEntrant.values());
+}
+
+/* ====================== fetch: live scores ====================== */
+async function fetchScores() {
+  const url = "https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard/" + ESPN_EVENT_ID;
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) throw new Error("Could not load live scores (HTTP " + res.status + ")");
+  const data = await res.json();
+  // ESPN's bare /scoreboard endpoint wraps results in {events:[...]}, but hitting a specific
+  // event via /scoreboard/{id} returns that event object directly at the top level instead --
+  // confirmed empirically (the two shapes are genuinely different, not a guess). Handle both.
+  const event = (data.events && data.events[0]) || (data.competitions ? data : null);
+  if (!event) throw new Error("ESPN returned no event data for id " + ESPN_EVENT_ID);
+  const comp = event.competitions && event.competitions[0];
+  const competitors = (comp && comp.competitors) || [];
+
+  const map = new Map(); // normalized name -> {rawName, r1,r2,r3,r4 (each vs. par), status}
+  for (const c of competitors) {
+    const rawName = c.athlete && c.athlete.displayName;
+    if (!rawName) continue;
+    const rounds = { 1: null, 2: null, 3: null, 4: null };
+    if (Array.isArray(c.linescores)) {
+      for (const ls of c.linescores) {
+        const period = ls.period;
+        // ESPN's round-level linescore entry carries BOTH the raw stroke count (value: 70) and
+        // an already-computed to-par string (displayValue: "-2", "E", "+3") -- using their own
+        // computed to-par directly means this page never needs its own PAR constant to agree
+        // with the real course par, which could otherwise drift out of sync tournament to
+        // tournament. parseToPar("E") -> 0, parseToPar("-2") -> -2, parseToPar("+3") -> 3.
+        if (period >= 1 && period <= 4 && ls.displayValue != null && ls.displayValue !== "") {
+          rounds[period] = parseToPar(ls.displayValue);
+        }
+      }
+    }
+    const statusDesc = (c.status && c.status.type && (c.status.type.description || c.status.type.name)) || "";
+    const isCut = /cut/i.test(statusDesc);
+    const isWD = /withdr|wd/i.test(statusDesc);
+    map.set(normalizeName(rawName), {
+      rawName, r1: rounds[1], r2: rounds[2], r3: rounds[3], r4: rounds[4],
+      cut: isCut, wd: isWD,
+    });
+  }
+  return { map, eventName: event.name || TOURNAMENT_NAME, status: (event.status && event.status.type && event.status.type.description) || "" };
+}
+
+function parseToPar(displayValue) {
+  const s = String(displayValue).trim();
+  if (s === "E" || s === "") return 0;
+  const n = parseInt(s.replace("+", ""), 10);
+  return isNaN(n) ? null : n;
+}
+
+/* ====================== golfer resolution (mirrors Workbook B's Scoring tab) ====================== */
+function lookupGolfer(name, scoresMap) {
+  const norm = normalizeName(name);
+  if (!norm) return null;
+  if (scoresMap.has(norm)) return scoresMap.get(norm);
+  // Fallback: substring match either direction (handles minor formatting drift between the
+  // Picks list and ESPN's displayName -- same "flexible but bounded" idea as the Excel matching).
+  for (const [key, val] of scoresMap.entries()) {
+    if (key.includes(norm) || norm.includes(key)) return val;
+  }
+  return null;
+}
+
+function resolvePick(pickSlot, scoresMap) {
+  // If the primary pick withdrew, fall back to the alternate -- same rule as Scoring!Resolved.
+  let name = pickSlot.primary;
+  let g = name ? lookupGolfer(name, scoresMap) : null;
+  if (g && g.wd && pickSlot.alt) {
+    const altG = lookupGolfer(pickSlot.alt, scoresMap);
+    if (altG) { name = pickSlot.alt; g = altG; }
+  }
+  return { name, golfer: g };
+}
+
+function golferRoundVsPar(golfer, roundNum) {
+  // golfer.r1-r4 are already vs-par values (from ESPN's displayValue, e.g. "-2" -> -2),
+  // not raw stroke counts, so no PAR subtraction here.
+  if (!golfer) return null;
+  const val = golfer["r" + roundNum];
+  return (val == null) ? null : val; // round not yet posted -> null
+}
+
+function golferTotal(golfer, r1, r2, r3, r4) {
+  if (!golfer) return "CUT";
+  if (golfer.cut || golfer.wd) return "CUT";
+  if (r1 == null || r2 == null || r3 == null || r4 == null) return "CUT";
+  return r1 + r2 + r3 + r4;
+}
+
+/* ====================== per-entrant computation ====================== */
+function sumLowest(values, n) {
+  const nums = values.filter(v => typeof v === "number" && !isNaN(v));
+  if (nums.length < n) return null; // matches Excel's IFERROR(SUM(SMALL(...)),"") -- blank until enough data exists
+  nums.sort((a, b) => a - b);
+  let sum = 0;
+  for (let i = 0; i < n; i++) sum += nums[i];
+  return sum;
+}
+
+function computeEntrant(entrant, scoresMap) {
+  const slots = entrant.picks.map(p => {
+    const { name, golfer } = resolvePick(p, scoresMap);
+    const r1 = golferRoundVsPar(golfer, 1);
+    const r2 = golferRoundVsPar(golfer, 2);
+    const r3 = golferRoundVsPar(golfer, 3);
+    const r4 = golferRoundVsPar(golfer, 4);
+    const total = golferTotal(golfer, r1, r2, r3, r4);
+    return { name: name || "(no pick)", r1, r2, r3, r4, total, found: !!golfer };
+  });
+  const day1 = sumLowest(slots.map(s => s.r1), 10);
+  const day2 = sumLowest(slots.map(s => s.r2), 10);
+  const day3 = sumLowest(slots.map(s => s.r3), 5);
+  const day4 = sumLowest(slots.map(s => s.r4), 5);
+  const overall = sumLowest(slots.map(s => (typeof s.total === "number" ? s.total : null)), 5);
+  return { ...entrant, slots, day1, day2, day3, day4, overall };
+}
+
+/* ====================== ranking with tie-handling ====================== */
+function rankWithTies(entrants, key) {
+  const withScore = entrants.filter(e => typeof e[key] === "number");
+  withScore.sort((a, b) => a[key] - b[key]);
+  const out = [];
+  let rank = 0, seen = 0, lastScore = null;
+  for (const e of withScore) {
+    seen++;
+    if (e[key] !== lastScore) { rank = seen; lastScore = e[key]; }
+    out.push({ ...e, rank, tied: withScore.filter(x => x[key] === e[key]).length > 1 });
+  }
+  return out;
+}
+
+function fmtScore(n) {
+  if (n == null) return "–";
+  if (n === 0) return "E";
+  return n > 0 ? "+" + n : String(n);
+}
+function fmtStanding(e) {
+  if (e.rank == null) return "–";
+  return e.tied ? `T${e.rank}` : String(e.rank);
+}
+
+/* ====================== rendering ====================== */
+function renderDayTable(tblId, ranked, dayKey, label) {
+  const tbl = document.getElementById(tblId);
+  let html = `<thead><tr><th>Pos</th><th>Entrant</th><th class="num">${label}</th></tr></thead><tbody>`;
+  for (const e of ranked) {
+    html += `<tr><td class="rankcell ${e.tied ? 'standing-tie' : ''}">${fmtStanding(e)}</td>` +
+      `<td>${e.fullName}</td><td class="num">${fmtScore(e[dayKey])}</td></tr>`;
+  }
+  html += "</tbody>";
+  tbl.innerHTML = html;
+}
+
+function renderScorecards(entrants) {
+  const grid = document.getElementById("scorecardGrid");
+  grid.innerHTML = "";
+  for (const e of entrants) {
+    const div = document.createElement("div");
+    div.className = "sc-card";
+    div.dataset.searchKey = normalizeName(e.fullName);
+    let rows = "";
+    for (const s of e.slots) {
+      rows += `<tr><td>${s.name}${s.found ? "" : ' <span class="cut">(no live match)</span>'}</td>` +
+        `<td class="num">${fmtScore(s.r1)}</td><td class="num">${fmtScore(s.r2)}</td>` +
+        `<td class="num">${fmtScore(s.r3)}</td><td class="num">${fmtScore(s.r4)}</td>` +
+        `<td class="num ${s.total === 'CUT' ? 'cut' : ''}">${s.total === 'CUT' ? 'CUT' : fmtScore(s.total)}</td></tr>`;
+    }
+    div.innerHTML = `
+      <div class="sc-head">
+        <div class="nm">${e.fullName}</div>
+        <div class="sub">Day1: ${fmtScore(e.day1)} &nbsp; Day2: ${fmtScore(e.day2)} &nbsp; Day3: ${fmtScore(e.day3)} &nbsp; Day4: ${fmtScore(e.day4)} &nbsp; Overall: ${fmtScore(e.overall)}</div>
+      </div>
+      <table>
+        <thead><tr><th>Player</th><th class="num">R1</th><th class="num">R2</th><th class="num">R3</th><th class="num">R4</th><th class="num">Total</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+    grid.appendChild(div);
+  }
+}
+
+document.getElementById("scSearch").addEventListener("input", (e) => {
+  const q = normalizeName(e.target.value);
+  document.querySelectorAll(".sc-card").forEach(card => {
+    card.style.display = card.dataset.searchKey.includes(q) ? "" : "none";
+  });
+});
+
+/* ====================== tabs ====================== */
+document.getElementById("tabs").addEventListener("click", (e) => {
+  const tab = e.target.closest(".tab");
+  if (!tab) return;
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+  tab.classList.add("active");
+  document.getElementById("panel-" + tab.dataset.panel).classList.add("active");
+});
+
+/* ====================== main refresh cycle ====================== */
+let refreshing = false;
+async function refreshAll() {
+  if (refreshing) return;
+  refreshing = true;
+  const statusEl = document.getElementById("lastUpdated");
+  statusEl.innerHTML = '<span class="spin"></span>Updating…';
+  try {
+    const [entrantsRaw, scoreData] = await Promise.all([fetchPicks(), fetchScores()]);
+    clearError();
+    const computed = entrantsRaw.map(e => computeEntrant(e, scoreData.map));
+
+    renderDayTable("tbl-overall", rankWithTies(computed, "overall"), "overall", "Overall");
+    renderDayTable("tbl-day1", rankWithTies(computed, "day1"), "day1", "Day 1");
+    renderDayTable("tbl-day2", rankWithTies(computed, "day2"), "day2", "Day 2");
+    renderDayTable("tbl-day3", rankWithTies(computed, "day3"), "day3", "Day 3");
+    renderDayTable("tbl-day4", rankWithTies(computed, "day4"), "day4", "Day 4");
+    renderScorecards(computed.slice().sort((a, b) => a.fullName.localeCompare(b.fullName)));
+
+    document.getElementById("eventSub").textContent = scoreData.eventName + (scoreData.status ? " — " + scoreData.status : "");
+    statusEl.textContent = "Last updated " + new Date().toLocaleTimeString();
+    document.getElementById("footNote").textContent =
+      entrantsRaw.length + " entrants loaded. Scores pulled live from ESPN; refreshes automatically every " +
+      Math.round(REFRESH_MS / 1000) + "s, or hit Refresh now.";
+  } catch (err) {
+    showError("Couldn't fully refresh: " + err.message + "\n\nThis page fetches live from Google Sheets and ESPN " +
+      "directly in your browser -- if either source is briefly unavailable, or blocks cross-site requests, this " +
+      "message shows instead of silently failing. Try Refresh now in a moment.");
+    statusEl.textContent = "Last attempt failed — " + new Date().toLocaleTimeString();
+  } finally {
+    refreshing = false;
+  }
+}
+
+document.getElementById("refreshBtn").addEventListener("click", refreshAll);
+document.getElementById("pageTitle").textContent = TOURNAMENT_NAME.replace(" — Detroit Golf Club", "") + " — Live Leaderboard";
+refreshAll();
+setInterval(refreshAll, REFRESH_MS);
+</script>
+</body>
+</html>
