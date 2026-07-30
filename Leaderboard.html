@@ -72,6 +72,10 @@
     display:inline-block; background:var(--lightred); color:var(--red); font-size:.68rem;
     padding:2px 8px; border-radius:10px; margin-left:8px; font-weight:700; vertical-align:middle;
   }
+  .sc-total-row td{
+    background:var(--lightgreen) !important; font-weight:700; border-top:2px solid var(--green);
+  }
+  .live-mark{color:var(--gold); font-weight:700; margin-left:1px;}
   .searchbox{
     width:100%; max-width:320px; padding:8px 10px; border:1px solid var(--border);
     border-radius:6px; font-size:.9rem; margin:0 auto 14px; display:block;
@@ -108,11 +112,11 @@
     <div class="tab" data-panel="scorecards">Scorecards</div>
   </div>
 
-  <div class="panel active" id="panel-overall"><div class="card"><table id="tbl-overall"></table></div></div>
-  <div class="panel" id="panel-day1"><div class="card"><table id="tbl-day1"></table></div></div>
-  <div class="panel" id="panel-day2"><div class="card"><table id="tbl-day2"></table></div></div>
-  <div class="panel" id="panel-day3"><div class="card"><table id="tbl-day3"></table></div></div>
-  <div class="panel" id="panel-day4"><div class="card"><table id="tbl-day4"></table></div></div>
+  <div class="panel active" id="panel-overall"><div class="card"><table id="tbl-overall"></table><div class="note" id="tbl-overall-note" style="display:none;">* = live running total (best 5 of however many of that entrant's picks have posted so far) -- not final until 5+ have scores.</div></div></div>
+  <div class="panel" id="panel-day1"><div class="card"><table id="tbl-day1"></table><div class="note" id="tbl-day1-note" style="display:none;">* = live running total (best 10 of however many have posted so far) -- not final until 10+ have scores.</div></div></div>
+  <div class="panel" id="panel-day2"><div class="card"><table id="tbl-day2"></table><div class="note" id="tbl-day2-note" style="display:none;">* = live running total (best 10 of however many have posted so far) -- not final until 10+ have scores.</div></div></div>
+  <div class="panel" id="panel-day3"><div class="card"><table id="tbl-day3"></table><div class="note" id="tbl-day3-note" style="display:none;">* = live running total (best 5 of however many have posted so far) -- not final until 5+ have scores.</div></div></div>
+  <div class="panel" id="panel-day4"><div class="card"><table id="tbl-day4"></table><div class="note" id="tbl-day4-note" style="display:none;">* = live running total (best 5 of however many have posted so far) -- not final until 5+ have scores.</div></div></div>
   <div class="panel" id="panel-scorecards">
     <input type="text" class="searchbox" id="scSearch" placeholder="Search entrant name…">
     <div class="note">Every entrant's 15 picks, live round-by-round scores (vs. par), and running total.</div>
@@ -376,20 +380,47 @@ function golferRoundVsPar(golfer, roundNum) {
 }
 
 function golferTotal(golfer, r1, r2, r3, r4) {
-  if (!golfer) return "CUT";
-  if (golfer.cut || golfer.wd) return "CUT";
-  if (r1 == null || r2 == null || r3 == null || r4 == null) return "CUT";
+  // This is the golfer's FINAL 4-round total, for the per-golfer row's "Total" column. Only
+  // actually shows "CUT"/"WD" when ESPN says so -- missing rounds just because the tournament
+  // hasn't gotten there yet (e.g. it's still Round 1) are blank, not "CUT". A pick with no live
+  // ESPN match at all (wrong golfer name / not actually in the field) is also blank here, not
+  // "CUT" -- that's a data problem, not a real cut, and the "(no live match)" label next to the
+  // name already flags it.
+  if (!golfer) return null;
+  if (golfer.cut) return "CUT";
+  if (golfer.wd) return "WD";
+  if (r1 == null || r2 == null || r3 == null || r4 == null) return null;
   return r1 + r2 + r3 + r4;
+}
+
+function golferRunningTotal(golfer, r1, r2, r3, r4) {
+  // Live/running total for the Overall aggregate: sum of whichever rounds this golfer has
+  // posted so far, not just once all 4 are in (mirrors the Day1-4 "live" approach). CUT/WD
+  // golfers are excluded entirely (null) so best-5 selection skips them, same convention as the
+  // Excel workbooks' literal "CUT" text making SMALL() skip that golfer.
+  if (!golfer || golfer.cut || golfer.wd) return null;
+  const rounds = [r1, r2, r3, r4].filter(v => typeof v === "number");
+  if (rounds.length === 0) return null;
+  return rounds.reduce((a, b) => a + b, 0);
 }
 
 /* ====================== per-entrant computation ====================== */
 function sumLowest(values, n) {
+  // Live/running total: once at least one pick has a real score, sum the best min(n, available)
+  // of them -- so a day shows a real number as soon as ANY golfer has posted, not just once all
+  // `n` required golfers have. Once `n` or more golfers are in, this naturally becomes the real
+  // "best n of 15" rule since that's exactly min(n, available) at that point. Returns null only
+  // when literally nobody in this group has a score yet.
   const nums = values.filter(v => typeof v === "number" && !isNaN(v));
-  if (nums.length < n) return null; // matches Excel's IFERROR(SUM(SMALL(...)),"") -- blank until enough data exists
+  if (nums.length === 0) return null;
   nums.sort((a, b) => a - b);
+  const take = Math.min(n, nums.length);
   let sum = 0;
-  for (let i = 0; i < n; i++) sum += nums[i];
+  for (let i = 0; i < take; i++) sum += nums[i];
   return sum;
+}
+function countAvailable(values) {
+  return values.filter(v => typeof v === "number" && !isNaN(v)).length;
 }
 
 function computeEntrant(entrant, scoresMap) {
@@ -400,14 +431,26 @@ function computeEntrant(entrant, scoresMap) {
     const r3 = golferRoundVsPar(golfer, 3);
     const r4 = golferRoundVsPar(golfer, 4);
     const total = golferTotal(golfer, r1, r2, r3, r4);
-    return { name: name || "(no pick)", r1, r2, r3, r4, total, found: !!golfer };
+    const liveTotal = golferRunningTotal(golfer, r1, r2, r3, r4);
+    return { name: name || "(no pick)", r1, r2, r3, r4, total, liveTotal, found: !!golfer };
   });
-  const day1 = sumLowest(slots.map(s => s.r1), 10);
-  const day2 = sumLowest(slots.map(s => s.r2), 10);
-  const day3 = sumLowest(slots.map(s => s.r3), 5);
-  const day4 = sumLowest(slots.map(s => s.r4), 5);
-  const overall = sumLowest(slots.map(s => (typeof s.total === "number" ? s.total : null)), 5);
-  return { ...entrant, slots, day1, day2, day3, day4, overall };
+  const r1s = slots.map(s => s.r1), r2s = slots.map(s => s.r2);
+  const r3s = slots.map(s => s.r3), r4s = slots.map(s => s.r4);
+  const liveTotals = slots.map(s => s.liveTotal);
+  const day1 = sumLowest(r1s, 10), day2 = sumLowest(r2s, 10);
+  const day3 = sumLowest(r3s, 5), day4 = sumLowest(r4s, 5);
+  const overall = sumLowest(liveTotals, 5);
+  // "Partial" = fewer than the required count have posted yet, so the number shown is a live
+  // running total rather than the final "best n of 15" -- flagged in the UI with a small marker.
+  const day1Partial = day1 != null && countAvailable(r1s) < 10;
+  const day2Partial = day2 != null && countAvailable(r2s) < 10;
+  const day3Partial = day3 != null && countAvailable(r3s) < 5;
+  const day4Partial = day4 != null && countAvailable(r4s) < 5;
+  const overallPartial = overall != null && countAvailable(liveTotals) < 5;
+  return {
+    ...entrant, slots, day1, day2, day3, day4, overall,
+    day1Partial, day2Partial, day3Partial, day4Partial, overallPartial,
+  };
 }
 
 /* ====================== ranking with tie-handling ====================== */
@@ -429,6 +472,11 @@ function fmtScore(n) {
   if (n === 0) return "E";
   return n > 0 ? "+" + n : String(n);
 }
+// Adds a small "*" marker when a total is a live running total (not all required golfers have
+// posted yet) rather than the final "best n of 15" number.
+function fmtScoreLive(n, partial) {
+  return fmtScore(n) + (partial ? '<span class="live-mark" title="Live running total -- not all golfers have posted yet">*</span>' : "");
+}
 function fmtStanding(e) {
   if (e.rank == null) return "–";
   return e.tied ? `T${e.rank}` : String(e.rank);
@@ -437,13 +485,16 @@ function fmtStanding(e) {
 /* ====================== rendering ====================== */
 function renderDayTable(tblId, ranked, dayKey, label) {
   const tbl = document.getElementById(tblId);
+  const partialKey = dayKey + "Partial";
   let html = `<thead><tr><th>Pos</th><th>Entrant</th><th class="num">${label}</th></tr></thead><tbody>`;
   for (const e of ranked) {
     html += `<tr><td class="rankcell ${e.tied ? 'standing-tie' : ''}">${fmtStanding(e)}</td>` +
-      `<td>${e.fullName}</td><td class="num">${fmtScore(e[dayKey])}</td></tr>`;
+      `<td>${e.fullName}</td><td class="num">${fmtScoreLive(e[dayKey], e[partialKey])}</td></tr>`;
   }
   html += "</tbody>";
   tbl.innerHTML = html;
+  const note = document.getElementById(tblId + "-note");
+  if (note) note.style.display = ranked.some(e => e[partialKey]) ? "block" : "none";
 }
 
 function renderScorecards(entrants) {
@@ -455,19 +506,27 @@ function renderScorecards(entrants) {
     div.dataset.searchKey = normalizeName(e.fullName);
     let rows = "";
     for (const s of e.slots) {
+      const isCutOrWd = s.total === "CUT" || s.total === "WD";
       rows += `<tr><td>${s.name}${s.found ? "" : ' <span class="cut">(no live match)</span>'}</td>` +
         `<td class="num">${fmtScore(s.r1)}</td><td class="num">${fmtScore(s.r2)}</td>` +
         `<td class="num">${fmtScore(s.r3)}</td><td class="num">${fmtScore(s.r4)}</td>` +
-        `<td class="num ${s.total === 'CUT' ? 'cut' : ''}">${s.total === 'CUT' ? 'CUT' : fmtScore(s.total)}</td></tr>`;
+        `<td class="num ${isCutOrWd ? 'cut' : ''}">${isCutOrWd ? s.total : fmtScore(s.total)}</td></tr>`;
     }
+    const totalRow = e.locked ? "" : `<tr class="sc-total-row">` +
+      `<td>Total (best 10 / best 5)</td>` +
+      `<td class="num">${fmtScoreLive(e.day1, e.day1Partial)}</td>` +
+      `<td class="num">${fmtScoreLive(e.day2, e.day2Partial)}</td>` +
+      `<td class="num">${fmtScoreLive(e.day3, e.day3Partial)}</td>` +
+      `<td class="num">${fmtScoreLive(e.day4, e.day4Partial)}</td>` +
+      `<td class="num">${fmtScoreLive(e.overall, e.overallPartial)}</td></tr>`;
     div.innerHTML = `
       <div class="sc-head">
         <div class="nm">${e.fullName}${e.locked ? '<span class="locked-badge">⚠ Late — not counted</span>' : ''}</div>
-        <div class="sub">${e.locked ? "Submitted after picks locked (" + e.submittedAt + ") -- picks not counted." : "Day1: " + fmtScore(e.day1) + " &nbsp; Day2: " + fmtScore(e.day2) + " &nbsp; Day3: " + fmtScore(e.day3) + " &nbsp; Day4: " + fmtScore(e.day4) + " &nbsp; Overall: " + fmtScore(e.overall)}</div>
+        <div class="sub">${e.locked ? "Submitted after picks locked (" + e.submittedAt + ") -- picks not counted." : "Day1: " + fmtScoreLive(e.day1, e.day1Partial) + " &nbsp; Day2: " + fmtScoreLive(e.day2, e.day2Partial) + " &nbsp; Day3: " + fmtScoreLive(e.day3, e.day3Partial) + " &nbsp; Day4: " + fmtScoreLive(e.day4, e.day4Partial) + " &nbsp; Overall: " + fmtScoreLive(e.overall, e.overallPartial)}</div>
       </div>
       <table>
         <thead><tr><th>Player</th><th class="num">R1</th><th class="num">R2</th><th class="num">R3</th><th class="num">R4</th><th class="num">Total</th></tr></thead>
-        <tbody>${rows}</tbody>
+        <tbody>${rows}${totalRow}</tbody>
       </table>`;
     grid.appendChild(div);
   }
@@ -508,7 +567,9 @@ async function refreshAll() {
     renderDayTable("tbl-day2", rankWithTies(computed, "day2"), "day2", "Day 2");
     renderDayTable("tbl-day3", rankWithTies(computed, "day3"), "day3", "Day 3");
     renderDayTable("tbl-day4", rankWithTies(computed, "day4"), "day4", "Day 4");
-    renderScorecards(computed.slice().sort((a, b) => a.fullName.localeCompare(b.fullName)));
+    renderScorecards(computed.slice().sort((a, b) =>
+      (a.lastName || a.fullName).localeCompare(b.lastName || b.fullName) || a.fullName.localeCompare(b.fullName)
+    ));
 
     document.getElementById("eventSub").textContent = scoreData.eventName + (scoreData.status ? " — " + scoreData.status : "");
     statusEl.textContent = "Last updated " + new Date().toLocaleTimeString();
