@@ -3,11 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>2026 Majors Golf Challenge — Make Your Picks</title>
+<title>2026 PGA Majors Golf Challenge — Make Your Picks</title>
 <style>
   :root{
     --green:#155724; --green-dark:#0d3a19; --gold:#c9a227; --bg:#f4f6f4;
     --card:#ffffff; --border:#d7ddd7; --red:#b3261e; --text:#1b1f1b;
+    --lightgreen:#e6f4ea; --lightgold:#fdf3d0; --lightred:#fbeaea;
   }
   *{box-sizing:border-box;}
   body{
@@ -35,8 +36,29 @@
   .picknum{font-weight:700; color:var(--green); text-align:right; font-size:.9rem;}
   .altrow{margin-top:14px; padding-top:12px; border-top:1px dashed var(--border);}
   .altrow label{color:var(--red);}
+  /* searchable pick dropdown -- tap/click the field, type a few letters, tap a name */
+  .combo{position:relative;}
+  .combo-input{cursor:pointer;}
+  .combo-list{
+    display:none; position:absolute; top:100%; left:0; right:0; z-index:20; margin-top:2px;
+    background:#fff; border:1px solid var(--border); border-radius:6px; box-shadow:0 4px 14px rgba(0,0,0,.12);
+    max-height:220px; overflow-y:auto;
+  }
+  .combo-list.open{display:block;}
+  .combo-item{padding:9px 12px; font-size:.92rem; cursor:pointer;}
+  .combo-item:hover, .combo-item.active{background:var(--lightgreen);}
+  .combo-empty{padding:9px 12px; font-size:.85rem; color:#889;}
   .groupmeta{font-size:.8rem; color:#556; margin-bottom:10px;}
   .err{color:var(--red); font-size:.85rem; margin-top:6px; display:none;}
+  .roster-msg{
+    background:var(--lightgold, #fdf3d0); border:1px solid var(--gold); border-radius:6px;
+    padding:8px 10px; font-size:.82rem; color:#7a6420; margin-top:8px; line-height:1.4;
+  }
+  .deadline-note{
+    background:var(--lightgold, #fdf3d0); border:1px solid var(--gold); border-radius:8px;
+    padding:10px 14px; font-size:.85rem; color:#7a6420; margin-bottom:16px; line-height:1.5;
+    text-align:center; font-weight:600;
+  }
   .actions{position:sticky; bottom:0; background:var(--bg); padding:16px 0 4px;}
   button{
     width:100%; padding:14px; font-size:1.05rem; font-weight:700; border:none;
@@ -79,6 +101,52 @@
   .gateCard button{background:var(--green); color:#fff;}
   .gateErr{color:var(--red); font-size:.85rem; min-height:18px; margin-bottom:6px;}
   #mainContent{display:none;}
+  /* ---- tabs (shared pattern with the Leaderboard page) ---- */
+  .tabs{display:flex; gap:6px; flex-wrap:wrap; margin:0 0 16px; justify-content:center;}
+  .tab{
+    background:#fff; border:1px solid var(--border); color:#556; padding:8px 16px;
+    border-radius:20px; font-size:.85rem; font-weight:600; cursor:pointer;
+  }
+  .tab.active{background:var(--green); border-color:var(--green); color:#fff;}
+  .panel{display:none;}
+  .panel.active{display:block;}
+  /* ---- group rosters tab ---- */
+  .pickcount{font-weight:400; font-size:.85rem; color:#556;}
+  ol.plist{list-style:none; margin:0; padding:0; columns:2; column-gap:24px;}
+  ol.plist li{break-inside:avoid; padding:5px 0; font-size:.92rem; border-bottom:1px solid #eef1ee;}
+  .num{color:#8a978a; font-size:.8rem; margin-right:4px;}
+  .wgr{float:right; font-size:.75rem; color:#8a7420; background:#fdf6e0; padding:1px 6px; border-radius:4px;}
+  @media (max-width:480px){ ol.plist{columns:1;} }
+  /* ---- who's submitted tab ---- */
+  .statusbar{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; flex-wrap:wrap;}
+  .statusbar span{font-size:.8rem; color:#667;}
+  .statusbar button{
+    width:auto; background:#fff; border:1px solid var(--border); color:var(--green-dark);
+    padding:6px 12px; border-radius:6px; font-size:.8rem; font-weight:600; margin-bottom:0;
+  }
+  .statusbar button:hover{background:var(--lightgreen);}
+  .delaynote{
+    background:var(--lightgold); border:1px solid var(--gold); border-radius:8px;
+    padding:10px 14px; font-size:.82rem; color:#5a4a10; margin-bottom:14px; line-height:1.5;
+  }
+  #dataError{
+    display:none; background:var(--lightred); color:var(--red); border:1px solid #f0c9c6;
+    padding:10px 14px; border-radius:6px; font-size:.85rem; margin:10px 0; text-align:left;
+    white-space:pre-wrap;
+  }
+  table{width:100%; border-collapse:collapse; font-size:.85rem;}
+  th,td{padding:8px 10px; text-align:left; border-bottom:1px solid var(--border);}
+  th{
+    background:var(--green); color:#fff; font-size:.75rem; text-transform:uppercase;
+    letter-spacing:.03em;
+  }
+  tr:nth-child(even) td{background:#fafbfa;}
+  .me-hint{background:var(--lightgreen) !important;}
+  .searchbox{
+    width:100%; max-width:320px; padding:8px 10px; border:1px solid var(--border);
+    border-radius:6px; font-size:.9rem; margin:0 auto 14px; display:block;
+  }
+  .submitted-none{text-align:center; color:#889; font-size:.85rem; padding:20px 0;}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -104,9 +172,17 @@
 
 <div class="wrap">
 
-  <div style="text-align:center; margin-bottom:16px;">
-    <a href="Groups.html" style="color:#155724; font-weight:600; font-size:.95rem; text-decoration:none;">📋 View full group rosters &rarr;</a>
+  <div class="tabs" id="tabs">
+    <div class="tab active" data-panel="picks">Make Your Picks</div>
+    <div class="tab" data-panel="rosters">Group Rosters</div>
+    <div class="tab" data-panel="submitted">Who's Submitted</div>
   </div>
+
+  <!-- ====================== PANEL: Make Your Picks ====================== -->
+  <div class="panel active" id="panel-picks">
+
+  <div class="deadline-note" id="deadlineNote"></div>
+  <p class="note" style="text-align:center; margin:-8px 0 16px;">Changed your mind? Submitting again is totally fine — whichever submission has the latest timestamp before the deadline is the one that counts as your entry.</p>
 
   <div class="card">
     <h2>Your Info</h2>
@@ -115,9 +191,12 @@
     <label for="lastName">Last Name</label>
     <input type="text" id="lastName" placeholder="e.g. Neher" autocomplete="family-name">
     <div class="err" id="nameErr">Please enter your first and last name.</div>
-    <label for="aliasName">Nickname / Alias <span style="font-weight:400; color:#889;">(optional — only if you go by something else)</span></label>
-    <input type="text" id="aliasName" placeholder="e.g. Jay" autocomplete="off">
-    <p class="note">Pick from each of the 5 groups below (5 from Group A, 4 from Group B, 3 from Group C, 2 from Group D, 1 from Group E — 15 total), plus 1 alternate per group. The alternate only comes into play if one of your picks in that group withdraws before or during Round 1 or 2. No duplicate golfers across your whole team.</p>
+    <div class="roster-msg" id="rosterMsg" style="display:none;"></div>
+    <label id="newEntryLabel" style="display:none; margin-top:6px; font-weight:400;">
+      <input type="checkbox" id="newEntryCheck" style="width:auto; display:inline-block; margin-right:6px; vertical-align:middle;">
+      <span>I'm not on this list — I'm new to the pool this season</span>
+    </label>
+    <p class="note">Pick from each of the 5 groups below (5 from Group A, 4 from Group B, 3 from Group C, 2 from Group D, 1 from Group E — 15 total), plus 1 alternate per group. The alternate only comes into play if one of your picks in that group withdraws before or during Round 1 or 2. No duplicate golfers across your whole team. Not sure who's in each group? Check the <a href="#" data-goto-panel="rosters" style="color:var(--green-dark); font-weight:600;">Group Rosters</a> tab above.</p>
   </div>
 
   <div id="groupsContainer"></div>
@@ -140,7 +219,7 @@
         <button class="secondary" id="emailBtn" type="button">📧 Email My Picks</button>
         <button class="secondary" id="copyBtn" type="button">📋 Copy Data Row</button>
       </div>
-      <p class="note" style="text-align:center; margin-top:2px;">"Submit My Picks" sends your picks automatically — no email needed. Use Email or Copy as a backup if it fails.</p>
+      <p class="note" style="text-align:center; margin-top:2px;">"Submit My Picks" sends your picks automatically — no email needed. Use Email or Copy as a backup if it fails. After submitting, check the <a href="#" data-goto-panel="submitted" style="color:var(--green-dark); font-weight:600;">Who's Submitted</a> tab in a few minutes to confirm you're on the list.</p>
       <div id="saveRecordSection" style="display:none; margin-top:14px; padding-top:14px; border-top:1px dashed var(--border);">
         <p class="note" style="text-align:center; margin-bottom:8px;">Want a copy for yourself? Save a record of your picks below.</p>
         <div class="flex-btns">
@@ -150,6 +229,30 @@
       </div>
     </div>
   </div>
+
+  </div><!-- /panel-picks -->
+
+  <!-- ====================== PANEL: Group Rosters ====================== -->
+  <!-- Built dynamically from GROUPS/WGR_RANKS below in the script -- no hand-typed player
+       lists to keep in sync here. See renderRosters(). -->
+  <div class="panel" id="panel-rosters">
+    <div id="rostersContainer"></div>
+  </div><!-- /panel-rosters -->
+
+  <!-- ====================== PANEL: Who's Submitted ====================== -->
+  <div class="panel" id="panel-submitted">
+    <div class="delaynote">⏱ There's usually a short delay (a few minutes) between hitting "Submit My Picks" and your name showing up here — the sheet has to catch up. If you don't see yourself right away, wait about <strong>5 minutes</strong> and hit refresh before assuming something went wrong.</div>
+    <div class="statusbar">
+      <span id="submittedUpdated">Loading…</span>
+      <button id="submittedRefreshBtn" type="button">↻ Refresh now</button>
+    </div>
+    <div id="submittedError"></div>
+    <input type="text" class="searchbox" id="submittedSearch" placeholder="Search your name…">
+    <div class="card">
+      <table id="tbl-submitted"><thead><tr><th>Entry</th><th>Last Submitted</th></tr></thead><tbody></tbody></table>
+      <div class="submitted-none" id="submittedNone" style="display:none;">No submissions yet.</div>
+    </div>
+  </div><!-- /panel-submitted -->
 
 </div>
 </div><!-- /mainContent -->
@@ -167,7 +270,11 @@
 </div>
 
 <script>
-/* ====================== CONFIG — edit this each tournament ====================== */
+/* ====================== CONFIG — edit this each tournament ======================
+   This file is the master template: copy it for each new tournament and update the
+   block below. Everything past the CONFIG block (tabs, combobox, roster check,
+   Who's Submitted) is shared logic that shouldn't need to change tournament to
+   tournament. ================================================================== */
 const TOURNAMENT_NAME = "2026 The Open Championship";
 const SEND_TO_EMAIL = "jeff.neher@gmail.com"; // change to whoever collects picks (e.g. Chip Brunt)
 const ENTRY_PASSWORD = "Birkdale2026"; // change this each tournament and share it with entries only
@@ -176,7 +283,37 @@ const SUBMIT_URL = "https://script.google.com/macros/s/AKfycbxJp18dq8iLJzVAd-27e
 const SUBMIT_SECRET = "Majors2026"; // must exactly match SHARED_SECRET in the Apps Script — same all year
 const TOURNAMENT_ID = "The Open Championship"; // becomes this tournament's tab name in the year's Google Sheet
 const COURSE_INFO = "156 golfers in the field · Par 70 · 7,223 yards"; // field size + par, shown under the header — update each tournament (source: PGA Tour / tournament site)
+const PICKS_DEADLINE_TEXT = "5:00 AM Thursday, the morning the tournament begins"; // shown as the picks deadline notice -- update the day of week if this tournament doesn't start on a Thursday
+// Publish-to-web TSV link for THIS tournament's Picks tab -- same sheet/gid the Leaderboard page
+// reads, used here only to show who has submitted so far (read-only, no scoring happens on this
+// page). Leave blank until the Leaderboard page is set up for this tournament and you have the
+// real link -- the Who's Submitted tab will just show a friendly "couldn't load" error until then,
+// rather than silently showing a previous tournament's list.
+const PICKS_TSV_URL = "";
+const SUBMITTED_REFRESH_MS = 90 * 1000; // how often the Who's Submitted tab auto re-pulls
+// This season's approved entry roster, "First Last" -- used only to catch typos when someone
+// submits picks (e.g. misspelled last name). Pulled from Workbook A's Entry tab -- update this
+// list there first, then copy it over here each time the roster changes. Leave it empty to skip
+// the check entirely (nobody gets blocked while it's empty).
+const APPROVED_ENTRIES = [
+  "Chip Brunt", "Jeff Neher", "Ron Brunt", "Sandy Brunt",
+  "Scott Brunt", "Chris Starrs", "David White", "Jay Warrick",
+  "Ken Warrick", "Tim Bourff", "Mike Gervasini", "Chris Lalonde",
+  "Mike Lalonde", "Randy Smith", "Sandy Smith", "Bubba Stehmeier",
+  "Lynne Lewis", "Brad Harmon", "Tom Harmon", "Rob Bouton",
+  "Chad Carmichael", "Erick Banks", "Mike Orzel", "Jim Boudreau",
+  "Bob Alger", "Paul Kiker", "Sam Trawick", "John Vernocy",
+  "Marian Vernocy", "Seth Holloman", "Kevin Smallwood", "Eddie Stedem",
+  "Rick Turner", "John Dicristo", "Jim Stout", "John Platko",
+  "Richard Sorrow", "Jon Hayward", "Tim Radley", "Roger Kollat",
+  "Dalton Haven", "Gene Afusia", "Chris Jacovetti", "Larry Dukes",
+  "Shelton Collier", "Cullen Cameron", "Shane Hunt", "Greg Mangum",
+  "Tyler Mayrosh", "Dennis Dingler", "Laura Neher", "Brent Coffee",
+  "Geoff Cavender", "Barry Myers", "Jeff Zimmerman", "Bill Moertel",
+  "Dan Judge", "Jason Phillips",
+];
 const GROUPS = {"Group A": ["Rory McIlroy", "Matt Fitzpatrick", "Scottie Scheffler", "Tommy Fleetwood", "Xander Schauffele", "Justin Rose", "Robert MacIntyre", "Chris Gotterup", "Sam Burns", "Cameron Young", "Jon Rahm", "Wyndham Clark", "Collin Morikawa", "Ludvig Åberg", "Viktor Hovland", "Russell Henley", "Tyrrell Hatton", "Aaron Rai", "Ben Griffin", "Bryson DeChambeau"], "Group B": ["Tom Kim", "Patrick Reed", "Shane Lowry", "Akshay Bhatia", "Kristoffer Reitan", "Hideki Matsuyama", "Maverick McNealy", "Nicolai Højgaard", "Harris English", "Patrick Cantlay", "Joaquín Niemann", "Alex Noren", "Jacob Bridgeman", "Gary Woodland", "Rickie Fowler", "Marco Penge", "J.T. Poston", "Alex Smalley", "Ryan Gerard", "Kurt Kitayama", "Bud Cauley", "Daniel Berger", "Keegan Bradley", "Jake Knapp"], "Group C": ["Jordan Spieth", "Corey Conners", "Brian Harman", "Alex Fitzpatrick", "Adam Scott", "Brooks Koepka", "Jason Day", "Ryan Fox", "Nico Echavarria", "Cameron Smith", "Eugenio Chacarra", "Max Homa", "Ryo Hisatsune", "Michael Thorbjornsen", "Nick Taylor", "Jordan Smith", "Eric Cole", "David Puig", "Johnny Keefer", "Matt Wallace", "Pierceson Coody", "Michael Kim", "Michael Brennan", "Andrew Novak", "Harry Hall"], "Group D": ["Sahith Theegala", "Rasmus Højgaard", "Sungjae Im", "Victor Perez", "Tom McKibbin", "Haotong Li", "Rasmus Neergaard-Petersen", "Daniel Brown", "Jackson Suber", "John Parry", "Caleb Surratt", "Casey Jarvis", "Bernd Wiesberger", "Laurie Canter", "Shaun Norris", "Hennie Du Plessis", "Andy Sullivan", "Joakim Lagergren"], "Group E": ["Billy Horschel", "Padraig Harrington", "Jesper Svensson", "Matthew Jordan", "Stewart Cink", "Henrik Stenson", "Peter Uihlein", "Aldrich Potgieter", "Kazuki Higa", "Naoyuki Kataoka", "Antoine Rozner", "Joe Dean", "Alistair Docherty", "Martin Couvra", "Darren Clarke", "Nevill Ruiter (a)", "Stuart Grehan (a)"]};
+const WGR_RANKS = {}; // optional: World Golf Ranking per player, e.g. {"Rory McIlroy": 2} -- shown next to their name on the Group Rosters tab if provided; leave empty to skip
 /* =================================================================================== */
 
 /* ---- password gate: set up FIRST and independently of everything else on the page,
@@ -216,6 +353,25 @@ try {
   }
 } catch (e) { /* ignore — same in-app-browser restriction as above */ }
 
+/* ====================== tabs ====================== */
+function activatePanel(panelKey) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.panel === panelKey));
+  document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + panelKey));
+}
+document.getElementById('tabs').addEventListener('click', (e) => {
+  const tab = e.target.closest('.tab');
+  if (!tab) return;
+  activatePanel(tab.dataset.panel);
+});
+// In-page links that jump straight to a tab (e.g. "check the Group Rosters tab").
+document.querySelectorAll('[data-goto-panel]').forEach(link => {
+  link.addEventListener('click', (e) => {
+    e.preventDefault();
+    activatePanel(link.dataset.gotoPanel);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+});
+
 /* ---- everything else (building the pick form) runs after the gate is already wired
    up, and is wrapped so a failure here shows a visible error instead of silently
    breaking the rest of the page. ---- */
@@ -223,6 +379,11 @@ try {
 
 const container = document.getElementById('groupsContainer');
 const groupNames = Object.keys(GROUPS);
+
+function displayName(n) {
+  const rank = WGR_RANKS[n];
+  return rank ? `${n} (WGR ${rank})` : n;
+}
 
 groupNames.forEach((gname, gi) => {
   const players = GROUPS[gname]; // kept in World Golf Ranking order, best to worst
@@ -237,20 +398,22 @@ groupNames.forEach((gname, gi) => {
     html += `
       <div class="pickrow">
         <div class="picknum">${p}.</div>
-        <select class="pick-select" data-group="${gname}" data-slot="pick${p}">
-          <option value="">— Select Pick ${p} —</option>
-          ${players.map(n => `<option value="${n}">${n}</option>`).join('')}
-        </select>
+        <div class="combo" data-group="${gname}" data-slot="pick${p}">
+          <input type="text" class="combo-input" placeholder="— Select Pick ${p} —" autocomplete="off">
+          <input type="hidden" class="pick-select" data-group="${gname}" data-slot="pick${p}">
+          <div class="combo-list"></div>
+        </div>
       </div>`;
   }
 
   html += `
     <div class="altrow">
-      <label for="alt_${gi}">Alternate (backup if one of your picks WDs)</label>
-      <select class="pick-select" data-group="${gname}" data-slot="alt">
-        <option value="">— Select Alternate —</option>
-        ${players.map(n => `<option value="${n}">${n}</option>`).join('')}
-      </select>
+      <label>Alternate (backup if one of your picks WDs)</label>
+      <div class="combo" data-group="${gname}" data-slot="alt">
+        <input type="text" class="combo-input" placeholder="— Select Alternate —" autocomplete="off">
+        <input type="hidden" class="pick-select" data-group="${gname}" data-slot="alt">
+        <div class="combo-list"></div>
+      </div>
     </div>
     <div class="err" data-group-err="${gname}"></div>
   `;
@@ -259,8 +422,105 @@ groupNames.forEach((gname, gi) => {
   container.appendChild(card);
 });
 
+// Searchable dropdown: click/tap a pick field, type a few letters to filter, click a name to
+// select it. Replaces the native <select> so the same interaction works the same way on phones
+// and desktop. The visible text input is purely for display/search -- the actual value used by
+// collectPicks()/validate() lives on the paired hidden `.pick-select` input, same as before.
+function setupCombobox(comboEl) {
+  const gname = comboEl.dataset.group;
+  const players = GROUPS[gname];
+  const input = comboEl.querySelector('.combo-input');
+  const hidden = comboEl.querySelector('.pick-select');
+  const list = comboEl.querySelector('.combo-list');
+  let filtered = players;
+  let activeIndex = -1;
+
+  function renderList() {
+    if (!filtered.length) {
+      list.innerHTML = '<div class="combo-empty">No matches</div>';
+      return;
+    }
+    list.innerHTML = filtered.map((name, i) =>
+      `<div class="combo-item${i === activeIndex ? ' active' : ''}" data-idx="${i}">${displayName(name)}</div>`
+    ).join('');
+  }
+
+  function openList() {
+    filtered = players; // always start from the full list on open -- typing narrows it from there
+    activeIndex = -1;
+    renderList();
+    list.classList.add('open');
+    input.select();
+  }
+
+  function closeList() {
+    list.classList.remove('open');
+    // Snap the visible text back to whatever's actually selected (or blank) so a half-typed
+    // search string never lingers after clicking away without picking anything.
+    input.value = hidden.value ? displayName(hidden.value) : '';
+  }
+
+  function selectPlayer(name) {
+    hidden.value = name;
+    input.value = displayName(name);
+    closeList();
+    input.blur();
+  }
+
+  input.addEventListener('focus', openList);
+  input.addEventListener('input', () => {
+    const q = input.value.trim().toLowerCase();
+    filtered = q ? players.filter(n => n.toLowerCase().includes(q)) : players;
+    activeIndex = -1;
+    renderList();
+    list.classList.add('open');
+  });
+  input.addEventListener('keydown', (e) => {
+    if (!list.classList.contains('open')) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); activeIndex = Math.min(activeIndex + 1, filtered.length - 1); renderList(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); activeIndex = Math.max(activeIndex - 1, 0); renderList(); }
+    else if (e.key === 'Enter') { e.preventDefault(); if (activeIndex >= 0 && filtered[activeIndex]) selectPlayer(filtered[activeIndex]); }
+    else if (e.key === 'Escape') { closeList(); input.blur(); }
+  });
+  // mousedown (not click) fires before the input's blur, and preventDefault keeps focus on the
+  // input so blur's closeList() doesn't wipe the selection out from under the click.
+  list.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    const item = e.target.closest('.combo-item');
+    if (item) selectPlayer(filtered[Number(item.dataset.idx)]);
+  });
+  document.addEventListener('click', (e) => {
+    if (!comboEl.contains(e.target)) closeList();
+  });
+}
+document.querySelectorAll('.combo').forEach(setupCombobox);
+
+// Group Rosters tab -- built from the same GROUPS/WGR_RANKS config above, so there's only ever
+// one place to update the player list each tournament (no separate hardcoded roster HTML to
+// keep in sync).
+function renderRosters() {
+  const rostersEl = document.getElementById('rostersContainer');
+  let html = '';
+  groupNames.forEach(gname => {
+    const players = GROUPS[gname];
+    const nPicks = GROUP_PICKS[gname];
+    html += `<div class="card">
+      <h2>${gname} <span class="pickcount">— pick ${nPicks}</span></h2>
+      <div class="groupmeta">${players.length} players in this group, listed best to worst by World Golf Ranking.</div>
+      <ol class="plist">`;
+    players.forEach((name, i) => {
+      const rank = WGR_RANKS[name];
+      html += `<li><span class="num">${i + 1}.</span> <span class="pname">${name}</span>${rank ? `<span class="wgr">WGR ${rank}</span>` : ''}</li>`;
+    });
+    html += `</ol></div>`;
+  });
+  rostersEl.innerHTML = html;
+}
+renderRosters();
+
 document.getElementById('eventLabel').textContent = TOURNAMENT_NAME;
 document.getElementById('courseInfo').textContent = COURSE_INFO;
+document.getElementById('deadlineNote').textContent = `⏰ Picks are open until ${PICKS_DEADLINE_TEXT} -- no submissions accepted after that.`;
 
 /* ---- hidden test helper — nobody sees this unless they know to add
    ?autofill=jeff to the URL. Fills every group with random valid picks
@@ -284,19 +544,60 @@ if (new URLSearchParams(window.location.search).get('autofill') === 'jeff') {
         const j = Math.floor(Math.random() * (i + 1));
         [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
       }
-      document.querySelectorAll(`select[data-group="${CSS.escape(g)}"]`).forEach((sel, idx) => {
+      document.querySelectorAll(`.pick-select[data-group="${CSS.escape(g)}"]`).forEach((sel, idx) => {
         sel.value = shuffled[idx];
+        const combo = sel.closest('.combo');
+        combo.querySelector('.combo-input').value = displayName(shuffled[idx]);
       });
     });
   });
-  document.querySelector('.wrap').insertBefore(fillBtn, document.getElementById('groupsContainer'));
+  document.querySelector('#panel-picks').insertBefore(fillBtn, document.getElementById('groupsContainer'));
 }
 
 function getNameParts() {
   const first = document.getElementById('firstName').value.trim();
   const last = document.getElementById('lastName').value.trim();
-  const alias = document.getElementById('aliasName').value.trim();
-  return { first, last, alias, full: `${first} ${last}`.trim() };
+  return { first, last, full: `${first} ${last}`.trim() };
+}
+
+/* ---- roster typo check -- catches misspellings against this season's approved entry list
+   (subNormalizeName is defined further down, in the Who's Submitted section -- function
+   declarations are hoisted, so it's fine to use it up here). ---- */
+function levenshteinDistance(a, b) {
+  const m = a.length, n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  let prevRow = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const row = [i];
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      row.push(Math.min(row[j - 1] + 1, prevRow[j] + 1, prevRow[j - 1] + cost));
+    }
+    prevRow = row;
+  }
+  return prevRow[n];
+}
+
+// Returns { status: 'exact'|'close'|'none'|'skip', match, distance }. 'skip' means the roster
+// list hasn't been filled in yet, so the check is a no-op (nobody gets blocked). 'close' means a
+// near-miss (likely a typo) within a length-scaled edit-distance threshold -- close enough to
+// suggest a correction, but not exact.
+function findRosterMatch(fullName) {
+  if (!APPROVED_ENTRIES.length) return { status: 'skip' };
+  const norm = subNormalizeName(fullName);
+  if (!norm) return { status: 'skip' };
+  for (const approved of APPROVED_ENTRIES) {
+    if (subNormalizeName(approved) === norm) return { status: 'exact', match: approved, distance: 0 };
+  }
+  let best = null, bestDist = Infinity;
+  for (const approved of APPROVED_ENTRIES) {
+    const d = levenshteinDistance(norm, subNormalizeName(approved));
+    if (d < bestDist) { bestDist = d; best = approved; }
+  }
+  const threshold = Math.max(1, Math.round(norm.length * 0.25)); // allow ~1 typo per ~4 characters
+  if (best && bestDist <= threshold) return { status: 'close', match: best, distance: bestDist };
+  return { status: 'none' };
 }
 
 function collectPicks() {
@@ -304,7 +605,7 @@ function collectPicks() {
   let allSelections = [];
   groupNames.forEach(g => {
     data[g] = {};
-    document.querySelectorAll(`select[data-group="${CSS.escape(g)}"]`).forEach(sel => {
+    document.querySelectorAll(`.pick-select[data-group="${CSS.escape(g)}"]`).forEach(sel => {
       data[g][sel.dataset.slot] = sel.value;
       if (sel.value) allSelections.push(sel.value);
     });
@@ -324,6 +625,34 @@ function validate() {
     problems.push('enter your first and last name');
   } else {
     nameErr.style.display = 'none';
+  }
+
+  // Roster typo check -- only runs once a name is actually entered, and only if this season's
+  // roster has been filled in (APPROVED_ENTRIES). A close-but-not-exact match suggests a fix; no
+  // match at all (or a fix the entry doesn't make) requires checking "I'm new" to proceed.
+  const rosterMsgEl = document.getElementById('rosterMsg');
+  const newEntryLabel = document.getElementById('newEntryLabel');
+  const newEntryCheck = document.getElementById('newEntryCheck');
+  if (first && last) {
+    const result = findRosterMatch(`${first} ${last}`);
+    if (result.status === 'exact' || result.status === 'skip') {
+      rosterMsgEl.style.display = 'none';
+      newEntryLabel.style.display = 'none';
+    } else if (result.status === 'close') {
+      rosterMsgEl.textContent = `We don't see "${first} ${last}" exactly on this season's list -- did you mean "${result.match}"? ` +
+        `Double-check your spelling above, or check the box below if this really is a different/new entry.`;
+      rosterMsgEl.style.display = 'block';
+      newEntryLabel.style.display = 'block';
+      if (!newEntryCheck.checked) { ok = false; problems.push('double-check your name spelling against the roster, or check "I\'m new"'); }
+    } else { // 'none'
+      rosterMsgEl.textContent = `We don't see "${first} ${last}" on this season's list yet. If you're new to the pool, check the box below to confirm and continue -- we'll get you added.`;
+      rosterMsgEl.style.display = 'block';
+      newEntryLabel.style.display = 'block';
+      if (!newEntryCheck.checked) { ok = false; problems.push('confirm you\'re new to the pool (check the box), or fix your name to match the roster'); }
+    }
+  } else {
+    rosterMsgEl.style.display = 'none';
+    newEntryLabel.style.display = 'none';
   }
 
   const { data, allSelections } = collectPicks();
@@ -427,12 +756,16 @@ document.getElementById('submitOnlineBtn').addEventListener('click', () => {
     return;
   }
   const btn = document.getElementById('submitOnlineBtn');
-  const { first, last, alias, full: name } = getNameParts();
+  const { first, last, full: name } = getNameParts();
   const { data } = collectPicks();
+  const newEntryCheck = document.getElementById('newEntryCheck');
 
   const payload = {
     secret: SUBMIT_SECRET, tournament: TOURNAMENT_ID,
-    entryName: name, firstName: first, lastName: last, alias: alias
+    entryName: name, firstName: first, lastName: last,
+    // Flagged when the entry checked "I'm new" past the roster check -- lets whoever's
+    // reviewing submissions know to add them to next season's approved list.
+    isNew: (newEntryCheck && newEntryCheck.checked) ? "Yes" : ""
   };
   groupNames.forEach(g => {
     const key = g.replace(/\s+/g, '');
@@ -457,6 +790,9 @@ document.getElementById('submitOnlineBtn').addEventListener('click', () => {
   }).then(() => {
     btn.textContent = '✅ Submitted — check the sheet to confirm';
     document.getElementById('saveRecordSection').style.display = 'block';
+    // Give the sheet a moment, then eagerly refresh the Who's Submitted list so
+    // it has a head start by the time the entry switches tabs to check it.
+    setTimeout(refreshSubmitted, 60 * 1000);
   }).catch(() => {
     btn.disabled = false;
     btn.textContent = '🔁 Try Again';
@@ -544,6 +880,103 @@ document.getElementById('copyBtn').addEventListener('click', () => {
 } catch (pageErr) {
   showPageError('building the pick form', pageErr);
 }
+
+/* ====================== Who's Submitted tab ====================== */
+/* Reads the same published Picks TSV the Leaderboard page reads. Column layout must stay in
+   sync with COL in Leaderboard.html and the Apps Script schema (name=0, lastName=22,
+   submittedAt=21). Only used for display here -- no scoring, no lock-time logic. */
+const SUB_COL = { name: 0, lastName: 22, submittedAt: 21 };
+
+function subNormalizeName(s) {
+  if (!s) return "";
+  const manualMap = { "ø":"o","Ø":"o","æ":"ae","Æ":"ae","å":"a","Å":"a","ß":"ss",
+    "ð":"d","Ð":"d","þ":"th","Þ":"th","đ":"d","Đ":"d","ł":"l","Ł":"l" };
+  let out = s.normalize("NFD").replace(/[̀-ͯ]/g, "");
+  out = out.replace(/[øØæÆåÅßðÐþÞđĐłŁ]/g, ch => manualMap[ch] || ch);
+  return out.replace(/[.,]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function subParseTSV(text) {
+  const lines = text.replace(/\r/g, "").split("\n").filter(l => l.length > 0);
+  if (lines.length < 2) return [];
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) rows.push(lines[i].split("\t"));
+  return rows;
+}
+
+function subParseTimestamp(s) {
+  if (!s) return null;
+  const t = new Date(s).getTime();
+  return isNaN(t) ? null : t;
+}
+
+async function fetchSubmissions() {
+  const res = await fetch(PICKS_TSV_URL, { cache: "no-store" });
+  if (!res.ok) throw new Error("Could not load submissions (HTTP " + res.status + ")");
+  const text = await res.text();
+  const rows = subParseTSV(text);
+  const byKey = new Map(); // normalized name -> latest {fullName, submittedAt, ms}
+  for (const r of rows) {
+    const fullName = (r[SUB_COL.name] || "").trim();
+    if (!fullName) continue;
+    const submittedAt = (r[SUB_COL.submittedAt] || "").trim();
+    const ms = subParseTimestamp(submittedAt);
+    const key = subNormalizeName(fullName);
+    const existing = byKey.get(key);
+    // Keep whichever submission is most recent -- resubmitting (e.g. to fix a pick) just
+    // updates the timestamp shown here rather than creating a duplicate row.
+    if (!existing || (ms ?? -Infinity) > (existing.ms ?? -Infinity)) {
+      byKey.set(key, { fullName, submittedAt, ms });
+    }
+  }
+  return [...byKey.values()].sort((a, b) => (b.ms ?? -Infinity) - (a.ms ?? -Infinity));
+}
+
+function renderSubmitted(list) {
+  const tbody = document.querySelector('#tbl-submitted tbody');
+  const noneEl = document.getElementById('submittedNone');
+  if (!list.length) {
+    tbody.innerHTML = '';
+    noneEl.style.display = 'block';
+    return;
+  }
+  noneEl.style.display = 'none';
+  tbody.innerHTML = list.map(s =>
+    `<tr data-search-key="${subNormalizeName(s.fullName)}"><td>${s.fullName}</td><td>${s.submittedAt || '—'}</td></tr>`
+  ).join('');
+}
+
+let submittedRefreshing = false;
+async function refreshSubmitted() {
+  if (submittedRefreshing) return;
+  submittedRefreshing = true;
+  const statusEl = document.getElementById('submittedUpdated');
+  statusEl.textContent = 'Updating…';
+  try {
+    const list = await fetchSubmissions();
+    document.getElementById('submittedError').style.display = 'none';
+    renderSubmitted(list);
+    statusEl.textContent = list.length + ' submitted — last checked ' + new Date().toLocaleTimeString();
+  } catch (err) {
+    const box = document.getElementById('submittedError');
+    box.style.cssText = 'display:block; background:var(--lightred); color:var(--red); border:1px solid #f0c9c6; padding:10px 14px; border-radius:6px; font-size:.85rem; margin:10px 0;';
+    box.textContent = "Couldn't fully refresh (" + (err && err.message ? err.message : err) + "). Showing the last successful data below -- hit Refresh to try again.";
+    statusEl.textContent = 'Last checked ' + new Date().toLocaleTimeString() + ' (refresh failed)';
+  } finally {
+    submittedRefreshing = false;
+  }
+}
+
+document.getElementById('submittedRefreshBtn').addEventListener('click', refreshSubmitted);
+document.getElementById('submittedSearch').addEventListener('input', (e) => {
+  const q = subNormalizeName(e.target.value);
+  document.querySelectorAll('#tbl-submitted tbody tr').forEach(row => {
+    row.style.display = row.dataset.searchKey.includes(q) ? '' : 'none';
+  });
+});
+
+refreshSubmitted();
+setInterval(refreshSubmitted, SUBMITTED_REFRESH_MS);
 </script>
 
 </body>

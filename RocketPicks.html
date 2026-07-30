@@ -36,6 +36,18 @@
   .picknum{font-weight:700; color:var(--green); text-align:right; font-size:.9rem;}
   .altrow{margin-top:14px; padding-top:12px; border-top:1px dashed var(--border);}
   .altrow label{color:var(--red);}
+  /* searchable pick dropdown -- tap/click the field, type a few letters, tap a name */
+  .combo{position:relative;}
+  .combo-input{cursor:pointer;}
+  .combo-list{
+    display:none; position:absolute; top:100%; left:0; right:0; z-index:20; margin-top:2px;
+    background:#fff; border:1px solid var(--border); border-radius:6px; box-shadow:0 4px 14px rgba(0,0,0,.12);
+    max-height:220px; overflow-y:auto;
+  }
+  .combo-list.open{display:block;}
+  .combo-item{padding:9px 12px; font-size:.92rem; cursor:pointer;}
+  .combo-item:hover, .combo-item.active{background:var(--lightgreen);}
+  .combo-empty{padding:9px 12px; font-size:.85rem; color:#889;}
   .groupmeta{font-size:.8rem; color:#556; margin-bottom:10px;}
   .err{color:var(--red); font-size:.85rem; margin-top:6px; display:none;}
   .roster-msg{
@@ -170,6 +182,7 @@
   <div class="panel active" id="panel-picks">
 
   <div class="deadline-note" id="deadlineNote"></div>
+  <p class="note" style="text-align:center; margin:-8px 0 16px;">Changed your mind? Submitting again is totally fine — whichever submission has the latest timestamp before the deadline is the one that counts as your entry.</p>
 
   <div class="card">
     <h2>Your Info</h2>
@@ -410,20 +423,22 @@ groupNames.forEach((gname, gi) => {
     html += `
       <div class="pickrow">
         <div class="picknum">${p}.</div>
-        <select class="pick-select" data-group="${gname}" data-slot="pick${p}">
-          <option value="">— Select Pick ${p} —</option>
-          ${players.map(n => `<option value="${n}">${displayName(n)}</option>`).join('')}
-        </select>
+        <div class="combo" data-group="${gname}" data-slot="pick${p}">
+          <input type="text" class="combo-input" placeholder="— Select Pick ${p} —" autocomplete="off">
+          <input type="hidden" class="pick-select" data-group="${gname}" data-slot="pick${p}">
+          <div class="combo-list"></div>
+        </div>
       </div>`;
   }
 
   html += `
     <div class="altrow">
-      <label for="alt_${gi}">Alternate (backup if one of your picks WDs)</label>
-      <select class="pick-select" data-group="${gname}" data-slot="alt">
-        <option value="">— Select Alternate —</option>
-        ${players.map(n => `<option value="${n}">${displayName(n)}</option>`).join('')}
-      </select>
+      <label>Alternate (backup if one of your picks WDs)</label>
+      <div class="combo" data-group="${gname}" data-slot="alt">
+        <input type="text" class="combo-input" placeholder="— Select Alternate —" autocomplete="off">
+        <input type="hidden" class="pick-select" data-group="${gname}" data-slot="alt">
+        <div class="combo-list"></div>
+      </div>
     </div>
     <div class="err" data-group-err="${gname}"></div>
   `;
@@ -431,6 +446,79 @@ groupNames.forEach((gname, gi) => {
   card.innerHTML = html;
   container.appendChild(card);
 });
+
+// Searchable dropdown: click/tap a pick field, type a few letters to filter, click a name to
+// select it. Replaces the native <select> so the same interaction works the same way on phones
+// and desktop. The visible text input is purely for display/search -- the actual value used by
+// collectPicks()/validate() lives on the paired hidden `.pick-select` input, same as before.
+function setupCombobox(comboEl) {
+  const gname = comboEl.dataset.group;
+  const players = GROUPS[gname];
+  const input = comboEl.querySelector('.combo-input');
+  const hidden = comboEl.querySelector('.pick-select');
+  const list = comboEl.querySelector('.combo-list');
+  let filtered = players;
+  let activeIndex = -1;
+
+  function renderList() {
+    if (!filtered.length) {
+      list.innerHTML = '<div class="combo-empty">No matches</div>';
+      return;
+    }
+    list.innerHTML = filtered.map((name, i) =>
+      `<div class="combo-item${i === activeIndex ? ' active' : ''}" data-idx="${i}">${displayName(name)}</div>`
+    ).join('');
+  }
+
+  function openList() {
+    filtered = players; // always start from the full list on open -- typing narrows it from there
+    activeIndex = -1;
+    renderList();
+    list.classList.add('open');
+    input.select();
+  }
+
+  function closeList() {
+    list.classList.remove('open');
+    // Snap the visible text back to whatever's actually selected (or blank) so a half-typed
+    // search string never lingers after clicking away without picking anything.
+    input.value = hidden.value ? displayName(hidden.value) : '';
+  }
+
+  function selectPlayer(name) {
+    hidden.value = name;
+    input.value = displayName(name);
+    closeList();
+    input.blur();
+  }
+
+  input.addEventListener('focus', openList);
+  input.addEventListener('input', () => {
+    const q = input.value.trim().toLowerCase();
+    filtered = q ? players.filter(n => n.toLowerCase().includes(q)) : players;
+    activeIndex = -1;
+    renderList();
+    list.classList.add('open');
+  });
+  input.addEventListener('keydown', (e) => {
+    if (!list.classList.contains('open')) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); activeIndex = Math.min(activeIndex + 1, filtered.length - 1); renderList(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); activeIndex = Math.max(activeIndex - 1, 0); renderList(); }
+    else if (e.key === 'Enter') { e.preventDefault(); if (activeIndex >= 0 && filtered[activeIndex]) selectPlayer(filtered[activeIndex]); }
+    else if (e.key === 'Escape') { closeList(); input.blur(); }
+  });
+  // mousedown (not click) fires before the input's blur, and preventDefault keeps focus on the
+  // input so blur's closeList() doesn't wipe the selection out from under the click.
+  list.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    const item = e.target.closest('.combo-item');
+    if (item) selectPlayer(filtered[Number(item.dataset.idx)]);
+  });
+  document.addEventListener('click', (e) => {
+    if (!comboEl.contains(e.target)) closeList();
+  });
+}
+document.querySelectorAll('.combo').forEach(setupCombobox);
 
 document.getElementById('eventLabel').textContent = TOURNAMENT_NAME;
 document.getElementById('courseInfo').textContent = COURSE_INFO;
@@ -458,8 +546,10 @@ if (new URLSearchParams(window.location.search).get('autofill') === 'jeff') {
         const j = Math.floor(Math.random() * (i + 1));
         [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
       }
-      document.querySelectorAll(`select[data-group="${CSS.escape(g)}"]`).forEach((sel, idx) => {
+      document.querySelectorAll(`.pick-select[data-group="${CSS.escape(g)}"]`).forEach((sel, idx) => {
         sel.value = shuffled[idx];
+        const combo = sel.closest('.combo');
+        combo.querySelector('.combo-input').value = displayName(shuffled[idx]);
       });
     });
   });
@@ -517,7 +607,7 @@ function collectPicks() {
   let allSelections = [];
   groupNames.forEach(g => {
     data[g] = {};
-    document.querySelectorAll(`select[data-group="${CSS.escape(g)}"]`).forEach(sel => {
+    document.querySelectorAll(`.pick-select[data-group="${CSS.escape(g)}"]`).forEach(sel => {
       data[g][sel.dataset.slot] = sel.value;
       if (sel.value) allSelections.push(sel.value);
     });
