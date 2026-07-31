@@ -124,6 +124,8 @@
     background:var(--green-dark); color:#fff; cursor:pointer;
   }
   .payouts-gate-card button:hover{opacity:.9;}
+  .payouts-row{display:flex; gap:16px; flex-wrap:wrap; align-items:flex-start; margin-bottom:14px;}
+  .payouts-row .stats-card{flex:1 1 260px; margin-bottom:0;}
   .tb-group.tb-split h3{color:var(--red);}
   .tb-group.tb-pending h3{color:var(--gold);}
   .tb-scoreline{font-size:.82rem; color:#556; margin-bottom:10px;}
@@ -266,11 +268,15 @@ const MANUAL_WD_OVERRIDES = ["Patrick Rodgers"];
 const PAYOUTS_PASSWORD = "Detroit2026";
 // Manually maintained -- update Winner as results are decided (edit here, then push via GitHub
 // Desktop like everything else on this page). Not auto-computed from live scores.
+// Daily prize is $75/day for now -- this depends on final 2027 entry count (won't be known until
+// Feb 2027), so it may change. If a day ties, split the prize evenly rounded DOWN to the whole
+// dollar and list both names in "winner" (e.g. "Shane Hunt / Chad Carmichael"); the leftover
+// dollar(s) from the rounding stay with the pool -- e.g. a $75 tie splits $37/$37, pool keeps $1.
 const PAYOUTS = [
-  { tournament: "Rocket Classic (TEST)", category: "Day 1", prize: "$3", winner: "" },
-  { tournament: "Rocket Classic (TEST)", category: "Day 2", prize: "$4", winner: "" },
-  { tournament: "Rocket Classic (TEST)", category: "Day 3", prize: "$5", winner: "" },
-  { tournament: "Rocket Classic (TEST)", category: "Day 4", prize: "$6", winner: "" },
+  { tournament: "Rocket Classic (TEST)", category: "Day 1", prize: "$75", winner: "Shane Hunt" },
+  { tournament: "Rocket Classic (TEST)", category: "Day 2", prize: "$75", winner: "" },
+  { tournament: "Rocket Classic (TEST)", category: "Day 3", prize: "$75", winner: "" },
+  { tournament: "Rocket Classic (TEST)", category: "Day 4", prize: "$75", winner: "" },
   { tournament: "Rocket Classic (TEST)", category: "Overall 1st", prize: "$300", winner: "" },
   { tournament: "Rocket Classic (TEST)", category: "Overall 2nd", prize: "$180", winner: "" },
   { tournament: "Rocket Classic (TEST)", category: "Overall 3rd", prize: "$140", winner: "" },
@@ -760,6 +766,16 @@ document.getElementById("tbTabs").addEventListener("click", (e) => {
 });
 
 /* ====================== payouts (password-gated) ====================== */
+function payoutsTable(title, rows) {
+  const body = rows.map(p =>
+    `<tr><td>${p.category}</td><td class="num">${p.prize}</td>` +
+    `<td>${p.winner ? p.winner : '<span style="color:#889; font-style:italic;">TBD</span>'}</td></tr>`
+  ).join("");
+  return `<div class="card stats-card"><h3>${title}</h3>` +
+    `<table><thead><tr><th>Category</th><th class="num">Prize</th><th>Winner</th></tr></thead>` +
+    `<tbody>${body}</tbody></table></div>`;
+}
+
 function renderPayouts() {
   const container = document.getElementById("payoutsGrid");
   const byTournament = new Map();
@@ -769,13 +785,15 @@ function renderPayouts() {
   }
   let html = "";
   for (const [tournament, rows] of byTournament) {
-    const body = rows.map(p =>
-      `<tr><td>${p.category}</td><td class="num">${p.prize}</td>` +
-      `<td>${p.winner ? p.winner : '<span style="color:#889; font-style:italic;">TBD</span>'}</td></tr>`
-    ).join("");
-    html += `<div class="card stats-card"><h3>${tournament}</h3>` +
-      `<table><thead><tr><th>Category</th><th class="num">Prize</th><th>Winner</th></tr></thead>` +
-      `<tbody>${body}</tbody></table></div>`;
+    const daily = rows.filter(p => p.category.startsWith("Day"));
+    const overall = rows.filter(p => p.category.startsWith("Overall"));
+    const other = rows.filter(p => !p.category.startsWith("Day") && !p.category.startsWith("Overall"));
+    html += `<h3 style="margin:0 0 8px; color:var(--green-dark);">${tournament}</h3>`;
+    html += `<div class="payouts-row">`;
+    if (daily.length) html += payoutsTable("Daily", daily);
+    if (overall.length) html += payoutsTable("Overall", overall);
+    html += `</div>`;
+    if (other.length) html += `<div class="payouts-row">${payoutsTable("Other", other)}</div>`;
   }
   container.innerHTML = html;
 }
