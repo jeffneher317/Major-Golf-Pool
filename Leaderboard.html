@@ -44,6 +44,17 @@
   .tab.active{background:var(--green); border-color:var(--green); color:#fff;}
   .panel{display:none;}
   .panel.active{display:block;}
+  /* Tiebreakers sub-tabs (Day 1-4 + Overall) -- deliberately separate classes from .tab/.panel so
+     switching the TOP-level nav (which blanket-clears every .tab/.panel on the page) never wipes
+     out which sub-tab is selected inside the Tiebreakers panel. */
+  .tbtabs{display:flex; gap:6px; flex-wrap:wrap; margin:0 0 16px; justify-content:center;}
+  .tbtab{
+    background:#fff; border:1px solid var(--border); color:#556; padding:6px 14px;
+    border-radius:20px; font-size:.8rem; font-weight:600; cursor:pointer;
+  }
+  .tbtab.active{background:var(--green); border-color:var(--green); color:#fff;}
+  .tbpanel{display:none;}
+  .tbpanel.active{display:block;}
   .card{
     background:var(--card); border:1px solid var(--border); border-radius:10px;
     padding:16px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,.04);
@@ -179,7 +190,18 @@
       pick beyond the ones that count (11th pick for Day 1/2, 6th pick for Day 3/4/Overall), lowest
       score wins that level, repeat until broken. If all 15 picks tie, the spot(s) split. Each card has
       a starter paragraph you can copy into the results email and dress up.</div>
-    <div id="tiebreakerReport"></div>
+    <div class="tbtabs" id="tbTabs">
+      <div class="tbtab active" data-tbpanel="day1">Day 1</div>
+      <div class="tbtab" data-tbpanel="day2">Day 2</div>
+      <div class="tbtab" data-tbpanel="day3">Day 3</div>
+      <div class="tbtab" data-tbpanel="day4">Day 4</div>
+      <div class="tbtab" data-tbpanel="overall">Overall</div>
+    </div>
+    <div class="tbpanel active" id="tbpanel-day1"><div id="tiebreakerReport-day1"></div></div>
+    <div class="tbpanel" id="tbpanel-day2"><div id="tiebreakerReport-day2"></div></div>
+    <div class="tbpanel" id="tbpanel-day3"><div id="tiebreakerReport-day3"></div></div>
+    <div class="tbpanel" id="tbpanel-day4"><div id="tiebreakerReport-day4"></div></div>
+    <div class="tbpanel" id="tbpanel-overall"><div id="tiebreakerReport-overall"></div></div>
   </div>
 
   <p class="note" id="footNote"></p>
@@ -666,6 +688,17 @@ document.getElementById("tabs").addEventListener("click", (e) => {
   document.getElementById("panel-" + tab.dataset.panel).classList.add("active");
 });
 
+/* Tiebreakers sub-tabs (Day 1-4 + Overall). Separate element/class from the top nav on purpose --
+   see the .tbtab/.tbpanel CSS comment -- so this selection survives switching top-level tabs. */
+document.getElementById("tbTabs").addEventListener("click", (e) => {
+  const tab = e.target.closest(".tbtab");
+  if (!tab) return;
+  document.querySelectorAll(".tbtab").forEach(t => t.classList.remove("active"));
+  document.querySelectorAll(".tbpanel").forEach(p => p.classList.remove("active"));
+  tab.classList.add("active");
+  document.getElementById("tbpanel-" + tab.dataset.tbpanel).classList.add("active");
+});
+
 /* ====================== tiebreaker resolver ====================== */
 // Mirrors the rule Chip Brunt spells out in his Day 1-4 results emails: a day's total is the
 // best N of an entrant's 15 picks (N=10 for Day1/Day2, N=5 for Day3/Day4/Overall). If two or
@@ -1114,11 +1147,9 @@ function buildTiebreakWriteup(label, g, startRank, cfg) {
 }
 
 function renderTiebreakers(computed, scoreData) {
-  const box = document.getElementById("tiebreakerReport");
-  let html = "";
-  let anyTies = false;
-
-  // --- Daily: rank-1 only, gated on the round being final ---
+  // --- Daily: rank-1 only, gated on the round being final. Each day gets its own sub-tab/panel
+  // now, so unlike before there's always SOMETHING to show there -- either the resolved tie, a
+  // "no tie" note, or (before the round wraps) a placeholder explaining it's not available yet.
   const DAILY_CONFIG = [
     { key: "day1", label: "Day 1", n: 10, valuesKey: "r1", roundNum: 1 },
     { key: "day2", label: "Day 2", n: 10, valuesKey: "r2", roundNum: 2 },
@@ -1126,12 +1157,22 @@ function renderTiebreakers(computed, scoreData) {
     { key: "day4", label: "Day 4", n: 5, valuesKey: "r4", roundNum: 4 },
   ];
   for (const cfg of DAILY_CONFIG) {
-    if (!isRoundComplete(scoreData.map, cfg.roundNum)) continue; // don't populate until the round is final
-    const groups = computeTiebreakGroups(computed, cfg.key, cfg.n, cfg.valuesKey, 1, false, false);
-    for (const g of groups) {
-      anyTies = true;
-      html += renderTiebreakGroup(cfg.label, g, g.rank, cfg);
+    const dayBox = document.getElementById("tiebreakerReport-" + cfg.key);
+    const roundComplete = isRoundComplete(scoreData.map, cfg.roundNum);
+    let dayHtml;
+    if (!roundComplete) {
+      dayHtml = `<div class="tb-provisional">⚠ ${cfg.label} isn't final yet -- the Daily winner tiebreaker (if there is one) ` +
+        `will show here as soon as Round ${cfg.roundNum} is complete.</div>`;
+    } else {
+      const groups = computeTiebreakGroups(computed, cfg.key, cfg.n, cfg.valuesKey, 1, false, false);
+      if (!groups.length) {
+        dayHtml = `<div class="tb-none">Round ${cfg.roundNum} is final -- no tie for the ${cfg.label} win.</div>`;
+      } else {
+        dayHtml = groups.map(g => renderTiebreakGroup(cfg.label, g, g.rank, cfg)).join("");
+      }
     }
+    dayBox.innerHTML = dayHtml;
+    wireTbCopyButtons(dayBox);
   }
 
   // --- Overall: ranks 1..OVERALL_TIEBREAK_DISPLAY_CAP, live. Step 2 of the tiebreak (Round 4
@@ -1139,27 +1180,27 @@ function renderTiebreakers(computed, scoreData) {
   // unresolved by Step 1 shows as "pending" rather than a false split. Tracked through 6th place
   // even though only the top OVERALL_PAYOUT_SPOTS currently pay, so the report doesn't need
   // rebuilding the day the pool grows -- but never shows 7th place or beyond.
+  const overallBox = document.getElementById("tiebreakerReport-overall");
   const round4Complete = isRoundComplete(scoreData.map, 4);
   const overallCfg = { label: "Overall", n: 5, valuesKey: "liveTotal", round4Complete };
   const overallGroups = computeTiebreakGroups(computed, "overall", overallCfg.n, overallCfg.valuesKey, OVERALL_TIEBREAK_DISPLAY_CAP, true, round4Complete);
-  let anyOverallTies = false;
+  let overallHtml = "";
   for (const g of overallGroups) {
-    anyTies = true;
-    anyOverallTies = true;
-    html += renderTiebreakGroup("Overall", g, g.rank, overallCfg);
+    overallHtml += renderTiebreakGroup("Overall", g, g.rank, overallCfg);
   }
-
-  if (!anyTies) {
-    html = `<div class="tb-none">No payout-relevant ties right now (Daily winner spot, or Overall places 1-${OVERALL_TIEBREAK_DISPLAY_CAP}). ` +
-      `This report updates automatically -- Daily ties populate once that round is final; Overall updates live.</div>`;
-  }
-  if (anyOverallTies && !round4Complete) {
-    html = `<div class="tb-provisional">⚠ Overall standings are still in progress -- these tiebreak positions are provisional and can ` +
+  if (!overallGroups.length) {
+    overallHtml = `<div class="tb-none">No ties right now for Overall places 1-${OVERALL_TIEBREAK_DISPLAY_CAP}. This updates live as scores come in.</div>`;
+  } else if (!round4Complete) {
+    overallHtml = `<div class="tb-provisional">⚠ Overall standings are still in progress -- these tiebreak positions are provisional and can ` +
       `change as later rounds are completed. Final results won't be locked in until the tournament wraps up ` +
-      `(typically Sunday evening / Monday morning).</div>` + html;
+      `(typically Sunday evening / Monday morning).</div>` + overallHtml;
   }
-  box.innerHTML = html;
-  box.querySelectorAll(".tb-copybtn").forEach(btn => {
+  overallBox.innerHTML = overallHtml;
+  wireTbCopyButtons(overallBox);
+}
+
+function wireTbCopyButtons(container) {
+  container.querySelectorAll(".tb-copybtn").forEach(btn => {
     btn.addEventListener("click", () => {
       const text = document.getElementById(btn.dataset.target).textContent;
       navigator.clipboard.writeText(text).then(() => {
