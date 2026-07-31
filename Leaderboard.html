@@ -111,6 +111,7 @@
     padding:14px 16px; margin-bottom:14px;
   }
   .tb-group h3{margin:0 0 6px; font-size:1rem; color:var(--green-dark);}
+  .stats-card h3{margin:0 0 8px; font-size:1rem; color:var(--green-dark);}
   .tb-group.tb-split h3{color:var(--red);}
   .tb-group.tb-pending h3{color:var(--gold);}
   .tb-scoreline{font-size:.82rem; color:#556; margin-bottom:10px;}
@@ -171,6 +172,7 @@
     <div class="tab" data-panel="day4">Day 4</div>
     <div class="tab" data-panel="scorecards">Scorecards</div>
     <div class="tab" data-panel="tiebreakers">Tiebreakers</div>
+    <div class="tab" data-panel="stats">Stats</div>
   </div>
 
   <div class="panel active" id="panel-overall"><div class="tb-provisional" id="unofficial-overall" style="display:none;"></div><div class="card"><table id="tbl-overall"></table><div class="note" id="tbl-overall-note" style="display:none;">* = live running total (best 5 of however many of that entry's picks have posted so far) -- not final until 5+ have scores.</div></div></div>
@@ -202,6 +204,12 @@
     <div class="tbpanel" id="tbpanel-day3"><div id="tiebreakerReport-day3"></div></div>
     <div class="tbpanel" id="tbpanel-day4"><div id="tiebreakerReport-day4"></div></div>
     <div class="tbpanel" id="tbpanel-overall"><div id="tiebreakerReport-overall"></div></div>
+  </div>
+  <div class="panel" id="panel-stats">
+    <div class="note">How many entries picked each golfer, and their to-par score each round -- pulled live from
+      the same picks and scores everything else on this page uses. Only golfers someone actually picked show up
+      here (not the full field).</div>
+    <div id="statsGrid"></div>
   </div>
 
   <p class="note" id="footNote"></p>
@@ -1217,6 +1225,49 @@ function renderTiebreakers(computed, scoreData) {
   wireTbCopyButtons(overallBox);
 }
 
+// Pick popularity + per-round scores, grouped by Group A-E. Group boundaries are derived from
+// GROUP_PICKS (same 5-4-3-2-1 slot order every entrant's picks are already stored in) rather than
+// a separate roster list, since this page has never needed to know the full field -- only who
+// actually got picked. Golfers who withdrew and got substituted by an alternate show under
+// whichever slot they're CURRENTLY resolved to (same as everywhere else on this page), not
+// double-counted under both names.
+function renderStats(computed) {
+  const container = document.getElementById("statsGrid");
+  const groupNames = Object.keys(GROUP_PICKS);
+  const ranges = [];
+  let start = 0;
+  for (const g of groupNames) {
+    const n = GROUP_PICKS[g];
+    ranges.push({ group: g, start, end: start + n });
+    start += n;
+  }
+  let html = "";
+  for (const r of ranges) {
+    const tally = new Map(); // normalized name -> { name, count, r1, r2, r3, r4, found }
+    for (const e of computed) {
+      for (let idx = r.start; idx < r.end; idx++) {
+        const s = e.slots[idx];
+        if (!s || !s.name || s.name === "(no pick)") continue;
+        const key = normalizeName(s.name);
+        if (!tally.has(key)) {
+          tally.set(key, { name: s.name, count: 0, r1: s.r1, r2: s.r2, r3: s.r3, r4: s.r4, found: s.found });
+        }
+        tally.get(key).count++;
+      }
+    }
+    const rows = [...tally.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+    const body = rows.length
+      ? rows.map(p => `<tr><td>${p.name}${p.found ? "" : ' <span class="cut">(no live match)</span>'}</td>` +
+          `<td class="num">${p.count}</td><td class="num">${fmtScore(p.r1)}</td><td class="num">${fmtScore(p.r2)}</td>` +
+          `<td class="num">${fmtScore(p.r3)}</td><td class="num">${fmtScore(p.r4)}</td></tr>`).join("")
+      : `<tr><td colspan="6" class="tb-none">No picks yet in ${r.group}.</td></tr>`;
+    html += `<div class="card stats-card"><h3>${r.group}</h3>` +
+      `<table><thead><tr><th>Player</th><th class="num">Times Picked</th><th class="num">R1</th><th class="num">R2</th><th class="num">R3</th><th class="num">R4</th></tr></thead>` +
+      `<tbody>${body}</tbody></table></div>`;
+  }
+  container.innerHTML = html;
+}
+
 function wireTbCopyButtons(container) {
   container.querySelectorAll(".tb-copybtn").forEach(btn => {
     btn.addEventListener("click", () => {
@@ -1254,6 +1305,7 @@ async function refreshAll() {
       (a.lastName || a.fullName).localeCompare(b.lastName || b.fullName) || a.fullName.localeCompare(b.fullName)
     ));
     renderTiebreakers(computed, scoreData);
+    renderStats(computed);
 
     document.getElementById("eventSub").textContent = scoreData.eventName + (scoreData.status ? " — " + scoreData.status : "");
     statusEl.textContent = "Last updated " + new Date().toLocaleTimeString();
