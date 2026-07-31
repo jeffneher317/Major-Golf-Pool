@@ -1006,10 +1006,19 @@ function renderTiebreakScorecards(g, cfg) {
         `<td class="num ${cls.r3}">${fmtScore(s.r3)}</td><td class="num ${cls.r4}">${fmtScore(s.r4)}</td>` +
         `<td class="num ${isCutOrWd ? "cut" : cls.liveTotal}">${totalDisplay}</td></tr>`;
     });
+    // Same totals row as the main Scorecards tab -- lets Jeff/Chip eyeball that the tiebreak math
+    // lines up with the best-10/best-5 totals without having to jump over to Scorecards to check.
+    const totalRow = e.locked ? "" : `<tr class="sc-total-row">` +
+      `<td>Total (best 10 / best 5)</td>` +
+      `<td class="num">${fmtScoreLive(e.day1, e.day1Partial)}</td>` +
+      `<td class="num">${fmtScoreLive(e.day2, e.day2Partial)}</td>` +
+      `<td class="num">${fmtScoreLive(e.day3, e.day3Partial)}</td>` +
+      `<td class="num">${fmtScoreLive(e.day4, e.day4Partial)}</td>` +
+      `<td class="num">${fmtScoreLive(e.overall, e.overallPartial)}</td></tr>`;
     html += `<div class="sc-card">
       <div class="sc-head"><div class="nm">${e.fullName}</div></div>
       <table><thead><tr><th>Player</th><th class="num">R1</th><th class="num">R2</th><th class="num">R3</th><th class="num">R4</th><th class="num">Total</th></tr></thead>
-      <tbody>${rows}</tbody></table>
+      <tbody>${rows}${totalRow}</tbody></table>
     </div>`;
   }
   html += `</div>`;
