@@ -218,6 +218,14 @@ const GROUP_PICKS = {"Group A": 5, "Group B": 4, "Group C": 3, "Group D": 2, "Gr
 const POOL_TIMEZONE = "America/New_York"; // must match the Google Sheet's configured timezone (Submitted At column)
 const OVERALL_PAYOUT_SPOTS = 5; // how many Overall places get paid, per the rules doc -- bump this up as the pool grows
 const OVERALL_TIEBREAK_DISPLAY_CAP = 6; // tiebreaker tab tracks ties through this place even if payout spots are fewer right now (room for the pool to grow) -- never shows 7th place or beyond
+// ESPN occasionally lags on flagging a golfer as withdrawn -- their score sits blank ("-") but
+// their status never actually switches to "Withdrawn", which blocks round-complete detection
+// (isRoundComplete) and skips the automatic alternate substitution (lookupGolfer) for anyone who
+// picked them. Add a golfer's name here EXACTLY as ESPN displays it to manually treat them as
+// withdrawn until ESPN's own data catches up -- safe to leave entries in permanently, since once
+// ESPN flags them WD on their own this has no additional effect. Remove the name once you no
+// longer need it, just to keep the list tidy.
+const MANUAL_WD_OVERRIDES = ["Patrick Rodgers"];
 /* =================================================================================== */
 
 /* ---- Picks TSV column layout (0-indexed), matches the Google Sheet / Apps Script schema ---- */
@@ -403,7 +411,8 @@ async function fetchScores() {
     }
     const statusDesc = (c.status && c.status.type && (c.status.type.description || c.status.type.name)) || "";
     const isCut = /cut/i.test(statusDesc);
-    const isWD = /withdr|wd/i.test(statusDesc);
+    const isManualWD = MANUAL_WD_OVERRIDES.some(n => normalizeName(n) === normalizeName(rawName));
+    const isWD = /withdr|wd/i.test(statusDesc) || isManualWD;
     map.set(normalizeName(rawName), {
       rawName, r1: rounds[1], r2: rounds[2], r3: rounds[3], r4: rounds[4],
       cut: isCut, wd: isWD,
