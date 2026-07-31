@@ -112,6 +112,18 @@
   }
   .tb-group h3{margin:0 0 6px; font-size:1rem; color:var(--green-dark);}
   .stats-card h3{margin:0 0 8px; font-size:1rem; color:var(--green-dark);}
+  .payouts-gate-card{max-width:360px; margin:20px auto; text-align:center; padding:20px;}
+  .payouts-gate-card h3{margin:0 0 6px; font-size:1.1rem; color:var(--green-dark);}
+  .payouts-gate-card input{
+    width:100%; box-sizing:border-box; padding:10px; margin:12px 0 6px; font-size:1rem;
+    border:1px solid var(--border); border-radius:8px;
+  }
+  .payouts-gate-err{color:var(--red); font-size:.85rem; margin-bottom:8px;}
+  .payouts-gate-card button{
+    width:100%; padding:10px; font-size:1rem; border:none; border-radius:8px;
+    background:var(--green-dark); color:#fff; cursor:pointer;
+  }
+  .payouts-gate-card button:hover{opacity:.9;}
   .tb-group.tb-split h3{color:var(--red);}
   .tb-group.tb-pending h3{color:var(--gold);}
   .tb-scoreline{font-size:.82rem; color:#556; margin-bottom:10px;}
@@ -173,6 +185,7 @@
     <div class="tab" data-panel="scorecards">Scorecards</div>
     <div class="tab" data-panel="tiebreakers">Tiebreakers</div>
     <div class="tab" data-panel="stats">Stats</div>
+    <div class="tab" data-panel="payouts">Payouts</div>
   </div>
 
   <div class="panel active" id="panel-overall"><div class="tb-provisional" id="unofficial-overall" style="display:none;"></div><div class="card"><table id="tbl-overall"></table><div class="note" id="tbl-overall-note" style="display:none;">* = live running total (best 5 of however many of that entry's picks have posted so far) -- not final until 5+ have scores.</div></div></div>
@@ -211,6 +224,20 @@
       here (not the full field).</div>
     <div id="statsGrid"></div>
   </div>
+  <div class="panel" id="panel-payouts">
+    <div class="payouts-gate-card card" id="payoutsGate">
+      <h3>Payouts</h3>
+      <div class="note">This section is password protected. Enter the pool password to view.</div>
+      <input type="password" id="payoutsPassword" placeholder="Password">
+      <div class="payouts-gate-err" id="payoutsErr" style="display:none;">Incorrect password.</div>
+      <button id="payoutsUnlockBtn">Unlock</button>
+    </div>
+    <div id="payoutsContent" style="display:none;">
+      <div class="note">Manually maintained -- prize amounts and winners are updated by hand as results are decided,
+        not calculated live.</div>
+      <div id="payoutsGrid"></div>
+    </div>
+  </div>
 
   <p class="note" id="footNote"></p>
 </div>
@@ -234,6 +261,22 @@ const OVERALL_TIEBREAK_DISPLAY_CAP = 6; // tiebreaker tab tracks ties through th
 // ESPN flags them WD on their own this has no additional effect. Remove the name once you no
 // longer need it, just to keep the list tidy.
 const MANUAL_WD_OVERRIDES = ["Patrick Rodgers"];
+// Keep this in sync with RocketPicks.html's ENTRY_PASSWORD -- same password gates both the picks
+// form and this Payouts tab.
+const PAYOUTS_PASSWORD = "Detroit2026";
+// Manually maintained -- update Winner as results are decided (edit here, then push via GitHub
+// Desktop like everything else on this page). Not auto-computed from live scores.
+const PAYOUTS = [
+  { tournament: "Rocket Classic (TEST)", category: "Day 1", prize: "$3", winner: "" },
+  { tournament: "Rocket Classic (TEST)", category: "Day 2", prize: "$4", winner: "" },
+  { tournament: "Rocket Classic (TEST)", category: "Day 3", prize: "$5", winner: "" },
+  { tournament: "Rocket Classic (TEST)", category: "Day 4", prize: "$6", winner: "" },
+  { tournament: "Rocket Classic (TEST)", category: "Overall 1st", prize: "$300", winner: "" },
+  { tournament: "Rocket Classic (TEST)", category: "Overall 2nd", prize: "$180", winner: "" },
+  { tournament: "Rocket Classic (TEST)", category: "Overall 3rd", prize: "$140", winner: "" },
+  { tournament: "Rocket Classic (TEST)", category: "Overall 4th", prize: "$100", winner: "" },
+  { tournament: "Rocket Classic (TEST)", category: "Overall 5th", prize: "$80", winner: "" },
+];
 /* =================================================================================== */
 
 /* ---- Picks TSV column layout (0-indexed), matches the Google Sheet / Apps Script schema ---- */
@@ -715,6 +758,53 @@ document.getElementById("tbTabs").addEventListener("click", (e) => {
   tab.classList.add("active");
   document.getElementById("tbpanel-" + tab.dataset.tbpanel).classList.add("active");
 });
+
+/* ====================== payouts (password-gated) ====================== */
+function renderPayouts() {
+  const container = document.getElementById("payoutsGrid");
+  const byTournament = new Map();
+  for (const p of PAYOUTS) {
+    if (!byTournament.has(p.tournament)) byTournament.set(p.tournament, []);
+    byTournament.get(p.tournament).push(p);
+  }
+  let html = "";
+  for (const [tournament, rows] of byTournament) {
+    const body = rows.map(p =>
+      `<tr><td>${p.category}</td><td class="num">${p.prize}</td>` +
+      `<td>${p.winner ? p.winner : '<span style="color:#889; font-style:italic;">TBD</span>'}</td></tr>`
+    ).join("");
+    html += `<div class="card stats-card"><h3>${tournament}</h3>` +
+      `<table><thead><tr><th>Category</th><th class="num">Prize</th><th>Winner</th></tr></thead>` +
+      `<tbody>${body}</tbody></table></div>`;
+  }
+  container.innerHTML = html;
+}
+
+function tryUnlockPayouts() {
+  const input = document.getElementById("payoutsPassword");
+  const err = document.getElementById("payoutsErr");
+  if (input.value === PAYOUTS_PASSWORD) {
+    err.style.display = "none";
+    try { sessionStorage.setItem("golfPoolUnlocked", "yes"); } catch (e) { /* ignore */ }
+    document.getElementById("payoutsGate").style.display = "none";
+    document.getElementById("payoutsContent").style.display = "";
+    renderPayouts();
+  } else {
+    err.style.display = "";
+  }
+}
+
+document.getElementById("payoutsUnlockBtn").addEventListener("click", tryUnlockPayouts);
+document.getElementById("payoutsPassword").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") tryUnlockPayouts();
+});
+try {
+  if (sessionStorage.getItem("golfPoolUnlocked") === "yes") {
+    document.getElementById("payoutsGate").style.display = "none";
+    document.getElementById("payoutsContent").style.display = "";
+    renderPayouts();
+  }
+} catch (e) { /* ignore */ }
 
 /* ====================== tiebreaker resolver ====================== */
 // Mirrors the rule Chip Brunt spells out in his Day 1-4 results emails: a day's total is the
