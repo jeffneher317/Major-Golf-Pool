@@ -89,6 +89,12 @@
     display:inline-block; background:var(--lightred); color:var(--red); font-size:.68rem;
     padding:2px 8px; border-radius:10px; margin-left:8px; font-weight:700; vertical-align:middle;
   }
+  .dnq-badge{
+    display:inline-block; background:var(--lightgold); color:#8a6d00; font-size:.68rem;
+    padding:2px 8px; border-radius:10px; margin-left:8px; font-weight:700; vertical-align:middle;
+  }
+  .dnq-row{opacity:.75;}
+  .dnq-row td.rankcell{font-size:.78rem; font-weight:700;}
   .sc-total-row td{
     background:var(--lightgreen) !important; font-weight:700; border-top:2px solid var(--green);
   }
@@ -190,11 +196,11 @@
     <div class="tab" data-panel="payouts">Payouts</div>
   </div>
 
-  <div class="panel active" id="panel-overall"><div class="tb-provisional" id="unofficial-overall" style="display:none;"></div><div class="card"><table id="tbl-overall"></table><div class="note" id="tbl-overall-note" style="display:none;">* = live running total (best 5 of however many of that entry's picks have posted so far) -- not final until 5+ have scores.</div></div></div>
+  <div class="panel active" id="panel-overall"><div class="tb-provisional" id="unofficial-overall" style="display:none;"></div><div class="card"><div class="note">An entry needs more than 5 of their 15 picks still posting real scores (not cut or withdrawn) to stay eligible here -- entries that don't qualify are shown as DNQ below.</div><table id="tbl-overall"></table><div class="note" id="tbl-overall-note" style="display:none;">* = live running total (best 5 of however many of that entry's picks have posted so far) -- not final until 5+ have scores.</div></div></div>
   <div class="panel" id="panel-day1"><div class="tb-provisional" id="unofficial-day1" style="display:none;"></div><div class="card"><table id="tbl-day1"></table><div class="note" id="tbl-day1-note" style="display:none;">* = live running total (best 10 of however many have posted so far) -- not final until 10+ have scores.</div></div></div>
   <div class="panel" id="panel-day2"><div class="tb-provisional" id="unofficial-day2" style="display:none;"></div><div class="card"><table id="tbl-day2"></table><div class="note" id="tbl-day2-note" style="display:none;">* = live running total (best 10 of however many have posted so far) -- not final until 10+ have scores.</div></div></div>
-  <div class="panel" id="panel-day3"><div class="tb-provisional" id="unofficial-day3" style="display:none;"></div><div class="card"><table id="tbl-day3"></table><div class="note" id="tbl-day3-note" style="display:none;">* = live running total (best 5 of however many have posted so far) -- not final until 5+ have scores.</div></div></div>
-  <div class="panel" id="panel-day4"><div class="tb-provisional" id="unofficial-day4" style="display:none;"></div><div class="card"><table id="tbl-day4"></table><div class="note" id="tbl-day4-note" style="display:none;">* = live running total (best 5 of however many have posted so far) -- not final until 5+ have scores.</div></div></div>
+  <div class="panel" id="panel-day3"><div class="tb-provisional" id="unofficial-day3" style="display:none;"></div><div class="card"><div class="note">An entry needs more than 5 of their 15 picks still posting real scores (not cut or withdrawn) to stay eligible here -- entries that don't qualify are shown as DNQ below.</div><table id="tbl-day3"></table><div class="note" id="tbl-day3-note" style="display:none;">* = live running total (best 5 of however many have posted so far) -- not final until 5+ have scores.</div></div></div>
+  <div class="panel" id="panel-day4"><div class="tb-provisional" id="unofficial-day4" style="display:none;"></div><div class="card"><div class="note">An entry needs more than 5 of their 15 picks still posting real scores (not cut or withdrawn) to stay eligible here -- entries that don't qualify are shown as DNQ below.</div><table id="tbl-day4"></table><div class="note" id="tbl-day4-note" style="display:none;">* = live running total (best 5 of however many have posted so far) -- not final until 5+ have scores.</div></div></div>
   <div class="panel" id="panel-scorecards">
     <input type="text" class="searchbox" id="scSearch" placeholder="Search entry name…">
     <div class="note">Every entry's 15 picks, live round-by-round scores (vs. par), and running total. <span class="live-mark" style="background:var(--lightgold); padding:1px 6px; border-radius:4px; color:var(--text); font-weight:700;">highlighted</span> scores are the ones actually counting toward that column's total right now.</div>
@@ -263,6 +269,12 @@ const OVERALL_TIEBREAK_DISPLAY_CAP = 6; // tiebreaker tab tracks ties through th
 // ESPN flags them WD on their own this has no additional effect. Remove the name once you no
 // longer need it, just to keep the list tidy.
 const MANUAL_WD_OVERRIDES = ["Patrick Rodgers"];
+// DNQ (did not qualify) rule: an entry needs MORE than this many of their 15 picks still posting
+// real scores (i.e. not shown as CUT or WD, and with a live ESPN match) to stay eligible for Day
+// 3, Day 4, and Overall standings/payouts. 5 or fewer qualifying picks -> DNQ, dropped from those
+// three rankings and tiebreakers (their raw score still shows, just marked DNQ instead of ranked).
+// Day 1 and Day 2 are never affected by this. Naturally a no-op until the field actually gets cut.
+const DNQ_MIN_QUALIFYING = 5;
 // Keep this in sync with RocketPicks.html's ENTRY_PASSWORD -- same password gates both the picks
 // form and this Payouts tab.
 const PAYOUTS_PASSWORD = "Detroit2026";
@@ -274,7 +286,7 @@ const PAYOUTS_PASSWORD = "Detroit2026";
 // dollar(s) from the rounding stay with the pool -- e.g. a $75 tie splits $37/$37, pool keeps $1.
 const PAYOUTS = [
   { tournament: "Rocket Classic (TEST)", category: "Day 1", prize: "$75", winner: "Shane Hunt" },
-  { tournament: "Rocket Classic (TEST)", category: "Day 2", prize: "$75", winner: "" },
+  { tournament: "Rocket Classic (TEST)", category: "Day 2", prize: "$75", winner: "Marian Vernocy" },
   { tournament: "Rocket Classic (TEST)", category: "Day 3", prize: "$75", winner: "" },
   { tournament: "Rocket Classic (TEST)", category: "Day 4", prize: "$75", winner: "" },
   { tournament: "Rocket Classic (TEST)", category: "Overall 1st", prize: "$300", winner: "" },
@@ -610,16 +622,26 @@ function computeEntrant(entrant, scoresMap) {
   const day1Idx = bestIndices(r1s, 10), day2Idx = bestIndices(r2s, 10);
   const day3Idx = bestIndices(r3s, 5), day4Idx = bestIndices(r4s, 5);
   const overallIdx = bestIndices(liveTotals, 5);
+  // DNQ check -- see DNQ_MIN_QUALIFYING comment. "Qualifying" = has a live ESPN match and isn't
+  // shown as CUT or WD, i.e. still actually posting real scores.
+  const qualifyingPicks = slots.filter(s => s.found && s.total !== "CUT" && s.total !== "WD").length;
+  const dnq = qualifyingPicks <= DNQ_MIN_QUALIFYING;
   return {
     ...entrant, slots, day1, day2, day3, day4, overall,
     day1Partial, day2Partial, day3Partial, day4Partial, overallPartial,
     day1Idx, day2Idx, day3Idx, day4Idx, overallIdx,
+    qualifyingPicks, dnq,
   };
 }
 
 /* ====================== ranking with tie-handling ====================== */
 function rankWithTies(entrants, key) {
-  const withScore = entrants.filter(e => typeof e[key] === "number");
+  // DNQ entries (see DNQ_MIN_QUALIFYING) are excluded from ranking/tiebreaking on Day 3, Day 4,
+  // and Overall -- their score still displays elsewhere, they just don't get a rank here, same as
+  // if they had no score at all. Day 1/Day 2 are never affected.
+  const dnqApplies = key === "day3" || key === "day4" || key === "overall";
+  const pool = dnqApplies ? entrants.filter(e => !e.dnq) : entrants;
+  const withScore = pool.filter(e => typeof e[key] === "number");
   withScore.sort((a, b) => a[key] - b[key]);
   const out = [];
   let rank = 0, seen = 0, lastScore = null;
@@ -670,13 +692,24 @@ function rankLabel(e, dayKey) {
 }
 
 /* ====================== rendering ====================== */
-function renderDayTable(tblId, ranked, dayKey, label) {
+function renderDayTable(tblId, ranked, dayKey, label, dnqEntrants) {
   const tbl = document.getElementById(tblId);
   const partialKey = dayKey + "Partial";
   let html = `<thead><tr><th>Pos</th><th>Entry</th><th class="num">${label}</th></tr></thead><tbody>`;
   for (const e of ranked) {
     html += `<tr><td class="rankcell ${e.tied ? 'standing-tie' : ''}">${fmtStanding(e)}</td>` +
       `<td>${e.fullName}</td><td class="num">${fmtScoreLive(e[dayKey], e[partialKey])}</td></tr>`;
+  }
+  // DNQ entries (5 or fewer picks still posting scores) list at the bottom, alphabetically --
+  // their raw score still shows for reference but they're not ranked and don't count for payouts.
+  if (dnqEntrants && dnqEntrants.length) {
+    const sortedDnq = dnqEntrants.slice().sort((a, b) =>
+      (a.lastName || a.fullName).localeCompare(b.lastName || b.fullName) || a.fullName.localeCompare(b.fullName)
+    );
+    for (const e of sortedDnq) {
+      html += `<tr class="dnq-row"><td class="rankcell cut">DNQ</td>` +
+        `<td>${e.fullName}</td><td class="num cut">${fmtScoreLive(e[dayKey], e[partialKey])}</td></tr>`;
+    }
   }
   html += "</tbody>";
   tbl.innerHTML = html;
@@ -717,7 +750,7 @@ function renderScorecards(entrants) {
       `<td class="num">${fmtScoreLive(e.overall, e.overallPartial)}</td></tr>`;
     div.innerHTML = `
       <div class="sc-head">
-        <div class="nm">${e.fullName}${e.locked ? '<span class="locked-badge">⚠ Late — not counted</span>' : ''}</div>
+        <div class="nm">${e.fullName}${e.locked ? '<span class="locked-badge">⚠ Late — not counted</span>' : (e.dnq ? '<span class="dnq-badge">⚠ DNQ — not eligible for Day 3/4/Overall</span>' : '')}</div>
         <div class="sub">${e.locked ? "Submitted after picks locked (" + e.submittedAt + ") -- picks not counted." : "Day1: " + fmtScoreLive(e.day1, e.day1Partial) + " &nbsp; Day2: " + fmtScoreLive(e.day2, e.day2Partial) + " &nbsp; Day3: " + fmtScoreLive(e.day3, e.day3Partial) + " &nbsp; Day4: " + fmtScoreLive(e.day4, e.day4Partial) + " &nbsp; Overall: " + fmtScoreLive(e.overall, e.overallPartial)}</div>
       </div>
       <table>
@@ -1403,11 +1436,12 @@ async function refreshAll() {
     const computed = entrantsRaw.map(e => computeEntrant(e, scoreData.map));
     attachRanks(computed);
 
-    renderDayTable("tbl-overall", rankWithTies(computed, "overall"), "overall", "Overall");
+    const dnqEntrants = computed.filter(e => e.dnq);
+    renderDayTable("tbl-overall", rankWithTies(computed, "overall"), "overall", "Overall", dnqEntrants);
     renderDayTable("tbl-day1", rankWithTies(computed, "day1"), "day1", "Day 1");
     renderDayTable("tbl-day2", rankWithTies(computed, "day2"), "day2", "Day 2");
-    renderDayTable("tbl-day3", rankWithTies(computed, "day3"), "day3", "Day 3");
-    renderDayTable("tbl-day4", rankWithTies(computed, "day4"), "day4", "Day 4");
+    renderDayTable("tbl-day3", rankWithTies(computed, "day3"), "day3", "Day 3", dnqEntrants);
+    renderDayTable("tbl-day4", rankWithTies(computed, "day4"), "day4", "Day 4", dnqEntrants);
     renderUnofficialBanners(scoreData);
     renderScorecards(computed.slice().sort((a, b) =>
       (a.lastName || a.fullName).localeCompare(b.lastName || b.fullName) || a.fullName.localeCompare(b.fullName)
