@@ -102,6 +102,9 @@
   .sc-card td.counted{
     background:var(--lightgold); font-weight:700; border-radius:4px;
   }
+  .sc-cut-cell{
+    background:#e3e5e8; color:#666; font-weight:700; border-radius:4px;
+  }
   .searchbox{
     width:100%; max-width:320px; padding:8px 10px; border:1px solid var(--border);
     border-radius:6px; font-size:.9rem; margin:0 auto 14px; display:block;
@@ -736,10 +739,17 @@ function renderScorecards(entrants) {
       // posted so far) -- same number that feeds the Overall aggregate -- not just the final
       // 4-round total, so it's meaningful from Day 1 on and updates as rounds progress.
       const totalDisplay = isCutOrWd ? s.total : fmtScore(s.liveTotal);
+      // Once a golfer is CUT/WD, Round 3 and Round 4 will never post a score -- show the actual
+      // reason instead of a blank dash, and gray those cells (and the Total cell) out.
+      const r3Display = isCutOrWd ? s.total : fmtScore(s.r3);
+      const r4Display = isCutOrWd ? s.total : fmtScore(s.r4);
+      const c3Class = isCutOrWd ? "sc-cut-cell" : c3;
+      const c4Class = isCutOrWd ? "sc-cut-cell" : c4;
+      const cTClass = isCutOrWd ? "sc-cut-cell" : cT;
       rows += `<tr><td>${s.name}${s.found ? "" : ' <span class="cut">(no live match)</span>'}</td>` +
         `<td class="num ${c1}">${fmtScore(s.r1)}</td><td class="num ${c2}">${fmtScore(s.r2)}</td>` +
-        `<td class="num ${c3}">${fmtScore(s.r3)}</td><td class="num ${c4}">${fmtScore(s.r4)}</td>` +
-        `<td class="num ${isCutOrWd ? 'cut' : cT}">${totalDisplay}</td></tr>`;
+        `<td class="num ${c3Class}">${r3Display}</td><td class="num ${c4Class}">${r4Display}</td>` +
+        `<td class="num ${cTClass}">${totalDisplay}</td></tr>`;
     });
     const totalRow = e.locked ? "" : `<tr class="sc-total-row">` +
       `<td>Total (best 10 / best 5)</td>` +
@@ -1150,10 +1160,17 @@ function renderTiebreakScorecards(g, cfg) {
         cls[cfg.valuesKey] = (cls[cfg.valuesKey] + " tb-decider").trim();
       }
       const totalDisplay = isCutOrWd ? s.total : fmtScore(s.liveTotal);
+      // Same CUT/WD treatment as the main Scorecards tab -- gray out R3/R4/Total once a golfer's
+      // out, instead of leaving them blank.
+      const r3Display = isCutOrWd ? s.total : fmtScore(s.r3);
+      const r4Display = isCutOrWd ? s.total : fmtScore(s.r4);
+      const r3Class = isCutOrWd ? "sc-cut-cell" : cls.r3;
+      const r4Class = isCutOrWd ? "sc-cut-cell" : cls.r4;
+      const totalClass = isCutOrWd ? "sc-cut-cell" : cls.liveTotal;
       rows += `<tr><td>${s.name}${s.found ? "" : ' <span class="cut">(no live match)</span>'}</td>` +
         `<td class="num ${cls.r1}">${fmtScore(s.r1)}</td><td class="num ${cls.r2}">${fmtScore(s.r2)}</td>` +
-        `<td class="num ${cls.r3}">${fmtScore(s.r3)}</td><td class="num ${cls.r4}">${fmtScore(s.r4)}</td>` +
-        `<td class="num ${isCutOrWd ? "cut" : cls.liveTotal}">${totalDisplay}</td></tr>`;
+        `<td class="num ${r3Class}">${r3Display}</td><td class="num ${r4Class}">${r4Display}</td>` +
+        `<td class="num ${totalClass}">${totalDisplay}</td></tr>`;
     });
     // Same totals row as the main Scorecards tab -- lets Jeff/Chip eyeball that the tiebreak math
     // lines up with the best-10/best-5 totals without having to jump over to Scorecards to check.
