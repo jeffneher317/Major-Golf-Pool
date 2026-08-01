@@ -460,6 +460,17 @@ async function fetchScores() {
   const map = new Map(); // normalized name -> {rawName, r1,r2,r3,r4 (each vs. par), status}
   let roundOneStarted = false;      // true once ANY competitor has a real posted Round 1 score
   let earliestR1TeeTimeUTC = null;  // earliest Round 1 tee time across the whole field
+  // ESPN's own c.status field is unreliable for this endpoint -- confirmed empirically that it
+  // comes back completely empty for this event (no "cut"/"withdrawn" text anywhere in the feed),
+  // even though ESPN's own website clearly shows CUT for the right players. Their site pulls that
+  // from a different, non-public, non-CORS-enabled data source we can't fetch directly. Instead,
+  // detect a cut the same way their missing data implies it: once Round 3 has been set up for the
+  // field at all (ANY competitor has a period-3 linescore entry -- even just a "-" placeholder for
+  // "hasn't teed off yet"), anyone whose linescores array has NO period-3 entry at all didn't make
+  // the cut. Verified against ESPN's own site data: 100% match across the full 147-player field.
+  const round3Available = competitors.some(c =>
+    Array.isArray(c.linescores) && c.linescores.some(ls => ls.period === 3)
+  );
   for (const c of competitors) {
     const rawName = c.athlete && c.athlete.displayName;
     if (!rawName) continue;
@@ -482,9 +493,12 @@ async function fetchScores() {
       }
     }
     const statusDesc = (c.status && c.status.type && (c.status.type.description || c.status.type.name)) || "";
-    const isCut = /cut/i.test(statusDesc);
     const isManualWD = MANUAL_WD_OVERRIDES.some(n => normalizeName(n) === normalizeName(rawName));
     const isWD = /withdr|wd/i.test(statusDesc) || isManualWD;
+    // Check WD first and exclude it from the cut check -- a withdrawn golfer also has no period-3
+    // entry, but should show/count as WD, not CUT.
+    const hasR3Entry = Array.isArray(c.linescores) && c.linescores.some(ls => ls.period === 3);
+    const isCut = !isWD && (/cut/i.test(statusDesc) || (round3Available && !hasR3Entry));
     map.set(normalizeName(rawName), {
       rawName, r1: rounds[1], r2: rounds[2], r3: rounds[3], r4: rounds[4],
       cut: isCut, wd: isWD,
