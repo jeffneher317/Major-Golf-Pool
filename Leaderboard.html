@@ -135,6 +135,26 @@
   .payouts-gate-card button:hover{opacity:.9;}
   .payouts-row{display:flex; gap:16px; flex-wrap:wrap; align-items:flex-start; margin-bottom:14px;}
   .payouts-row .stats-card{flex:1 1 260px; margin-bottom:0;}
+  .msg-post-card{max-width:480px; margin:0 auto 16px; padding:16px 20px;}
+  .msg-post-card h3{margin:0 0 6px; font-size:1.05rem; color:var(--green-dark);}
+  .msg-post-card select, .msg-post-card textarea{
+    width:100%; box-sizing:border-box; padding:10px; margin:8px 0; font-size:.95rem;
+    border:1px solid var(--border); border-radius:8px; font-family:inherit; resize:vertical;
+  }
+  .msg-post-card button{
+    width:100%; padding:10px; font-size:1rem; border:none; border-radius:8px;
+    background:var(--green-dark); color:#fff; cursor:pointer;
+  }
+  .msg-post-card button:hover{opacity:.9;}
+  .msg-post-card button:disabled{opacity:.6; cursor:default;}
+  .msg-item{
+    background:var(--card); border:1px solid var(--border); border-radius:10px;
+    padding:10px 14px; margin-bottom:10px; max-width:480px; margin-left:auto; margin-right:auto;
+  }
+  .msg-head{display:flex; justify-content:space-between; align-items:baseline; gap:8px; margin-bottom:4px;}
+  .msg-name{font-weight:700; color:var(--green-dark); font-size:.88rem;}
+  .msg-time{font-size:.72rem; color:#889; white-space:nowrap;}
+  .msg-text{font-size:.9rem; line-height:1.4; white-space:pre-wrap; word-break:break-word;}
   .tb-group.tb-split h3{color:var(--red);}
   .tb-group.tb-pending h3{color:var(--gold);}
   .tb-scoreline{font-size:.82rem; color:#556; margin-bottom:10px;}
@@ -197,6 +217,7 @@
     <div class="tab" data-panel="tiebreakers">Tiebreakers</div>
     <div class="tab" data-panel="stats">Stats</div>
     <div class="tab" data-panel="payouts">Payouts</div>
+    <div class="tab" data-panel="messages">Message Board</div>
   </div>
 
   <div class="panel active" id="panel-overall"><div class="tb-provisional" id="unofficial-overall" style="display:none;"></div><div class="card"><div class="note">An entry needs more than 5 of their 15 picks still posting real scores (not cut or withdrawn) to stay eligible here -- entries that don't qualify are shown as DNQ below.</div><table id="tbl-overall"></table><div class="note" id="tbl-overall-note" style="display:none;">* = live running total (best 5 of however many of that entry's picks have posted so far) -- not final until 5+ have scores.</div></div></div>
@@ -249,6 +270,18 @@
       <div id="payoutsGrid"></div>
     </div>
   </div>
+  <div class="panel" id="panel-messages">
+    <div class="card msg-post-card">
+      <h3>Post a message</h3>
+      <select id="msgName"><option value="">Choose your name…</option></select>
+      <textarea id="msgText" maxlength="500" rows="3" placeholder="Say something to the pool…"></textarea>
+      <div class="payouts-gate-err" id="msgErr" style="display:none;"></div>
+      <button id="msgPostBtn">Post</button>
+    </div>
+    <div class="note">Open to anyone -- please keep it civil. Your name comes from the live entry list
+      (not free text) so posts can't be attributed to someone who isn't actually in the pool.</div>
+    <div id="messageFeed"></div>
+  </div>
 
   <p class="note" id="footNote"></p>
 </div>
@@ -262,7 +295,7 @@ const PAR = 70;
 const REFRESH_MS = 90 * 1000; // how often to auto re-pull live data
 const GROUP_PICKS = {"Group A": 5, "Group B": 4, "Group C": 3, "Group D": 2, "Group E": 1}; // 15 total picks per entrant
 const POOL_TIMEZONE = "America/New_York"; // must match the Google Sheet's configured timezone (Submitted At column)
-const OVERALL_PAYOUT_SPOTS = 5; // how many Overall places get paid, per the rules doc -- bump this up as the pool grows
+const OVERALL_PAYOUT_SPOTS = 6; // how many Overall places get paid, per the rules doc -- bump this up as the pool grows
 const OVERALL_TIEBREAK_DISPLAY_CAP = 6; // tiebreaker tab tracks ties through this place even if payout spots are fewer right now (room for the pool to grow) -- never shows 7th place or beyond
 // ESPN occasionally lags on flagging a golfer as withdrawn -- their score sits blank ("-") but
 // their status never actually switches to "Withdrawn", which blocks round-complete detection
@@ -297,7 +330,22 @@ const PAYOUTS = [
   { tournament: "Rocket Classic (TEST)", category: "Overall 3rd", prize: "$140", winner: "" },
   { tournament: "Rocket Classic (TEST)", category: "Overall 4th", prize: "$100", winner: "" },
   { tournament: "Rocket Classic (TEST)", category: "Overall 5th", prize: "$80", winner: "" },
+  { tournament: "Rocket Classic (TEST)", category: "Overall 6th", prize: "$20", winner: "" },
 ];
+// Message Board -- posts go through the same Apps Script Web App as the picks form (RocketPicks.html).
+// SUBMIT_URL/SUBMIT_SECRET here must exactly match RocketPicks.html's values and the Apps Script's
+// SHARED_SECRET. Open to anyone (no page password) -- posters pick their name from the live entrant
+// list instead of typing free text, so a post can't be attributed to someone who isn't in the pool.
+// No automated moderation: if something inappropriate gets posted, delete that row directly in the
+// "Message Board" tab of the Sheet.
+const SUBMIT_URL = "https://script.google.com/macros/s/AKfycbxJp18dq8iLJzVAd-27eSvmZPJeGX-ERJxiHK3-aF0-v84_02ZheefVgIzAW4gxNCJOHw/exec"; // same Web App URL RocketPicks.html posts to
+const SUBMIT_SECRET = "Majors2026"; // must match SHARED_SECRET in the Apps Script
+// Publish the "Message Board" Sheet tab to the web (File > Share > Publish to web -- same steps
+// used for PICKS_TSV_URL above) once it exists, then paste the resulting TSV link here. The tab
+// gets created automatically the first time anyone posts a message, so it won't exist to publish
+// until after that first post.
+const MESSAGES_TSV_URL = "";
+const MAX_MESSAGE_LENGTH = 500;
 /* =================================================================================== */
 
 /* ---- Picks TSV column layout (0-indexed), matches the Google Sheet / Apps Script schema ---- */
@@ -880,6 +928,110 @@ try {
     renderPayouts();
   }
 } catch (e) { /* ignore */ }
+
+/* ====================== message board ====================== */
+function escapeHtml(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+// Messages tab columns (from the Apps Script "Message Board" tab): Timestamp, Name, Message.
+async function fetchMessages() {
+  if (!MESSAGES_TSV_URL) return []; // not published yet -- see the MESSAGES_TSV_URL comment above
+  const res = await fetch(MESSAGES_TSV_URL, { cache: "no-store" });
+  if (!res.ok) throw new Error("Could not load messages (HTTP " + res.status + ")");
+  const text = await res.text();
+  const rows = parseTSV(text);
+  return rows.map(r => ({
+    ts: parseSheetTimestamp(r[0]),
+    name: (r[1] || "").trim(),
+    message: (r[2] || "").trim(),
+  })).filter(m => m.message);
+}
+
+// Keeps the name dropdown in sync with whoever's actually submitted picks -- this is what makes
+// "pick your name" work instead of free text, without needing a separately-maintained roster.
+function renderMessageNameOptions(computed) {
+  const sel = document.getElementById("msgName");
+  if (!sel) return;
+  const current = sel.value;
+  const names = [...new Set(computed.map(e => e.fullName))].sort((a, b) => a.localeCompare(b));
+  sel.innerHTML = '<option value="">Choose your name…</option>' +
+    names.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join("");
+  if (names.includes(current)) sel.value = current;
+}
+
+function renderMessageFeed(messages) {
+  const feed = document.getElementById("messageFeed");
+  if (!feed) return;
+  if (!MESSAGES_TSV_URL) {
+    feed.innerHTML = '<div class="note">Message board isn\'t fully set up yet -- MESSAGES_TSV_URL needs to be filled in.</div>';
+    return;
+  }
+  if (!messages.length) {
+    feed.innerHTML = '<div class="note">No messages yet -- be the first to post.</div>';
+    return;
+  }
+  const sorted = messages.slice().sort((a, b) => (b.ts ?? 0) - (a.ts ?? 0));
+  feed.innerHTML = sorted.map(m => (
+    `<div class="msg-item"><div class="msg-head"><span class="msg-name">${escapeHtml(m.name)}</span>` +
+    (m.ts ? `<span class="msg-time">${new Date(m.ts).toLocaleString()}</span>` : "") +
+    `</div><div class="msg-text">${escapeHtml(m.message)}</div></div>`
+  )).join("");
+}
+
+let lastMessagePostAt = 0;
+function postMessage() {
+  const nameSel = document.getElementById("msgName");
+  const textEl = document.getElementById("msgText");
+  const errEl = document.getElementById("msgErr");
+  errEl.style.display = "none";
+  const name = nameSel.value;
+  const message = textEl.value.trim();
+  if (!name) { errEl.textContent = "Pick your name first."; errEl.style.display = ""; return; }
+  if (!message) { errEl.textContent = "Message can't be empty."; errEl.style.display = ""; return; }
+  // Simple client-side throttle (one post per 15s) to cut down on accidental double-taps and
+  // casual spam -- not real bot protection, that's what SUBMIT_SECRET is for.
+  const now = Date.now();
+  if (now - lastMessagePostAt < 15000) {
+    errEl.textContent = "Hang on a few seconds before posting again.";
+    errEl.style.display = "";
+    return;
+  }
+  lastMessagePostAt = now;
+  const trimmedMessage = message.substring(0, MAX_MESSAGE_LENGTH);
+  const btn = document.getElementById("msgPostBtn");
+  btn.disabled = true;
+  // Apps Script Web Apps don't send CORS headers, so the browser gets an opaque response with
+  // fetch -- same limitation as RocketPicks.html's submit -- so this can't actually confirm the
+  // POST landed server-side. Show it optimistically right away instead of waiting on the TSV feed,
+  // which can lag a few minutes behind a fresh edit anyway.
+  fetch(SUBMIT_URL, {
+    method: "POST",
+    mode: "no-cors",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify({ secret: SUBMIT_SECRET, type: "message", name, message: trimmedMessage }),
+  }).then(() => {
+    textEl.value = "";
+    const feed = document.getElementById("messageFeed");
+    const optimistic = document.createElement("div");
+    optimistic.className = "msg-item";
+    optimistic.innerHTML = `<div class="msg-head"><span class="msg-name">${escapeHtml(name)}</span>` +
+      `<span class="msg-time">Just now</span></div><div class="msg-text">${escapeHtml(trimmedMessage)}</div>`;
+    if (!feed.querySelector(".msg-item")) feed.innerHTML = "";
+    feed.insertBefore(optimistic, feed.firstChild);
+  }).catch(() => {
+    errEl.textContent = "Couldn't post right now -- try again in a bit.";
+    errEl.style.display = "";
+  }).finally(() => {
+    btn.disabled = false;
+  });
+}
+document.getElementById("msgPostBtn").addEventListener("click", postMessage);
+document.getElementById("msgText").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) postMessage();
+});
 
 /* ====================== tiebreaker resolver ====================== */
 // Mirrors the rule Chip Brunt spells out in his Day 1-4 results emails: a day's total is the
@@ -1479,6 +1631,14 @@ async function refreshAll() {
     ));
     renderTiebreakers(computed, scoreData);
     renderStats(computed);
+    renderMessageNameOptions(computed);
+    // Message board is intentionally isolated from the rest of this try block -- a hiccup loading
+    // the Messages feed (e.g. MESSAGES_TSV_URL not filled in yet) should never take down the live
+    // scores/standings above it.
+    fetchMessages().then(renderMessageFeed).catch(() => {
+      const feed = document.getElementById("messageFeed");
+      if (feed) feed.innerHTML = '<div class="note">Couldn\'t load messages right now.</div>';
+    });
 
     document.getElementById("eventSub").textContent = scoreData.eventName + (scoreData.status ? " — " + scoreData.status : "");
     statusEl.textContent = "Last updated " + new Date().toLocaleTimeString();
