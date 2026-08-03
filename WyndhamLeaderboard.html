@@ -782,8 +782,18 @@ function renderDayTable(tblId, ranked, dayKey, label, dnqEntrants) {
   if (note) note.style.display = ranked.some(e => e[partialKey]) ? "block" : "none";
 }
 
-function renderScorecards(entrants) {
+function renderScorecards(entrants, picksRevealed) {
   const grid = document.getElementById("scorecardGrid");
+  // Scorecards show every entry's actual picks -- must stay hidden until picks lock (first Round 1
+  // tee time), otherwise someone who finds this link before Thursday could see everyone else's
+  // picks ahead of the deadline. picksRevealed mirrors scoreData.lockTime from fetchScores(): null
+  // until ESPN shows a real Round 1 score, so this gate needs no separately-maintained date/time.
+  if (!picksRevealed) {
+    grid.innerHTML = '<div class="tb-provisional" style="text-align:center;">' +
+      '🔒 Scorecards are hidden until picks lock at the first Round 1 tee time Thursday morning. ' +
+      'Check back once the tournament starts.</div>';
+    return;
+  }
   grid.innerHTML = "";
   for (const e of entrants) {
     const div = document.createElement("div");
@@ -1555,8 +1565,16 @@ function renderTiebreakers(computed, scoreData) {
 // actually got picked. Golfers who withdrew and got substituted by an alternate show under
 // whichever slot they're CURRENTLY resolved to (same as everywhere else on this page), not
 // double-counted under both names.
-function renderStats(computed) {
+function renderStats(computed, picksRevealed) {
   const container = document.getElementById("statsGrid");
+  // Same picks-lock gate as renderScorecards() -- stats are built from the same live picks data,
+  // so they'd leak who-picked-what just as much as the Scorecards tab if shown before Thursday.
+  if (!picksRevealed) {
+    container.innerHTML = '<div class="tb-provisional" style="text-align:center;">' +
+      '🔒 Stats are hidden until picks lock at the first Round 1 tee time Thursday morning. ' +
+      'Check back once the tournament starts.</div>';
+    return;
+  }
   const groupNames = Object.keys(GROUP_PICKS);
   const ranges = [];
   let start = 0;
@@ -1628,9 +1646,9 @@ async function refreshAll() {
     renderUnofficialBanners(scoreData);
     renderScorecards(computed.slice().sort((a, b) =>
       (a.lastName || a.fullName).localeCompare(b.lastName || b.fullName) || a.fullName.localeCompare(b.fullName)
-    ));
+    ), !!scoreData.lockTime);
     renderTiebreakers(computed, scoreData);
-    renderStats(computed);
+    renderStats(computed, !!scoreData.lockTime);
     renderMessageNameOptions(computed);
     // Message board is intentionally isolated from the rest of this try block -- a hiccup loading
     // the Messages feed (e.g. MESSAGES_TSV_URL not filled in yet) should never take down the live
