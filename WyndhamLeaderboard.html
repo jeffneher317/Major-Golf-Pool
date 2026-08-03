@@ -1,0 +1,1672 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wyndham Championship (TEST) — Live Leaderboard</title>
+<style>
+  :root{
+    --green:#155724; --green-dark:#0d3a19; --gold:#c9a227; --bg:#f4f6f4;
+    --card:#ffffff; --border:#d7ddd7; --red:#b3261e; --text:#1b1f1b;
+    --lightgreen:#e6f4ea; --lightgold:#fdf3d0; --lightred:#fbeaea; --lightgray:#f4f6f4;
+  }
+  *{box-sizing:border-box;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg); color:var(--text); margin:0; padding:0 0 60px;
+  }
+  header{
+    background:linear-gradient(135deg,var(--green-dark),var(--green));
+    color:#fff; padding:24px 20px 18px; text-align:center;
+  }
+  header h1{margin:0 0 6px; font-size:1.5rem;}
+  header p{margin:0; opacity:.9; font-size:.9rem;}
+  .wrap{max-width:1000px; margin:0 auto; padding:16px;}
+  .statusbar{
+    display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:10px;
+    font-size:.8rem; color:#556; text-align:center; margin:10px 0 4px;
+  }
+  .statusbar button{
+    background:#fff; border:1px solid var(--border); color:var(--green-dark);
+    padding:6px 12px; border-radius:6px; font-size:.8rem; font-weight:600; cursor:pointer;
+  }
+  .statusbar button:hover{background:var(--lightgreen);}
+  #dataError{
+    display:none; background:var(--lightred); color:var(--red); border:1px solid #f0c9c6;
+    padding:10px 14px; border-radius:6px; font-size:.85rem; margin:10px 0; text-align:left;
+    white-space:pre-wrap;
+  }
+  .tabs{display:flex; gap:6px; flex-wrap:wrap; margin:14px 0; justify-content:center;}
+  .tab{
+    background:#fff; border:1px solid var(--border); color:#556; padding:8px 16px;
+    border-radius:20px; font-size:.85rem; font-weight:600; cursor:pointer;
+  }
+  .tab.active{background:var(--green); border-color:var(--green); color:#fff;}
+  .panel{display:none;}
+  .panel.active{display:block;}
+  /* Tiebreakers sub-tabs (Day 1-4 + Overall) -- deliberately separate classes from .tab/.panel so
+     switching the TOP-level nav (which blanket-clears every .tab/.panel on the page) never wipes
+     out which sub-tab is selected inside the Tiebreakers panel. */
+  .tbtabs{display:flex; gap:6px; flex-wrap:wrap; margin:0 0 16px; justify-content:center;}
+  .tbtab{
+    background:#fff; border:1px solid var(--border); color:#556; padding:6px 14px;
+    border-radius:20px; font-size:.8rem; font-weight:600; cursor:pointer;
+  }
+  .tbtab.active{background:var(--green); border-color:var(--green); color:#fff;}
+  .tbpanel{display:none;}
+  .tbpanel.active{display:block;}
+  .card{
+    background:var(--card); border:1px solid var(--border); border-radius:10px;
+    padding:16px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,.04);
+  }
+  table{width:100%; border-collapse:collapse; font-size:.85rem;}
+  th,td{padding:8px 10px; text-align:left; border-bottom:1px solid var(--border);}
+  th{
+    background:var(--green); color:#fff; font-size:.75rem; text-transform:uppercase;
+    letter-spacing:.03em; cursor:pointer; user-select:none; position:sticky; top:0;
+  }
+  th.num, td.num{text-align:right;}
+  tr:nth-child(even) td{background:#fafbfa;}
+  .rankcell{font-weight:700; color:var(--green-dark); width:44px;}
+  .standing-tie{color:var(--gold); font-weight:600;}
+  .me-row td{background:var(--lightgold) !important;}
+  .scorecard-grid{display:grid; grid-template-columns:1fr; gap:14px;}
+  @media(min-width:820px){ .scorecard-grid{grid-template-columns:1fr 1fr;} }
+  .sc-card{border:1px solid var(--border); border-radius:8px; overflow:hidden;}
+  .sc-head{background:var(--green); color:#fff; padding:8px 12px;}
+  .sc-head .nm{font-weight:700; font-size:.95rem;}
+  .sc-head .sub{font-size:.72rem; opacity:.9; margin-top:2px;}
+  .sc-card table{font-size:.78rem;}
+  .sc-card th{position:static; font-size:.68rem;}
+  .sc-rank-row th{
+    background:#fff; color:var(--gold); font-size:.62rem; font-weight:700;
+    letter-spacing:.02em; text-transform:none; padding:1px 10px 6px; cursor:default;
+    border-bottom:1px solid var(--border);
+  }
+  .sc-rank-row th.sc-rank-label{text-align:right; padding-right:12px; color:var(--gold);}
+  .cut{color:var(--red); font-weight:600;}
+  .locked-badge{
+    display:inline-block; background:var(--lightred); color:var(--red); font-size:.68rem;
+    padding:2px 8px; border-radius:10px; margin-left:8px; font-weight:700; vertical-align:middle;
+  }
+  .dnq-badge{
+    display:inline-block; background:var(--lightgold); color:#8a6d00; font-size:.68rem;
+    padding:2px 8px; border-radius:10px; margin-left:8px; font-weight:700; vertical-align:middle;
+  }
+  .dnq-row{opacity:.75;}
+  .dnq-row td.rankcell{font-size:.78rem; font-weight:700;}
+  .sc-total-row td{
+    background:var(--lightgreen) !important; font-weight:700; border-top:2px solid var(--green);
+  }
+  .live-mark{color:var(--gold); font-weight:700; margin-left:1px;}
+  .sc-card td.counted{
+    background:var(--lightgold); font-weight:700; border-radius:4px;
+  }
+  .sc-cut-cell{
+    background:#e3e5e8; color:#666; font-weight:700; border-radius:4px;
+  }
+  .searchbox{
+    width:100%; max-width:320px; padding:8px 10px; border:1px solid var(--border);
+    border-radius:6px; font-size:.9rem; margin:0 auto 14px; display:block;
+  }
+  .note{font-size:.78rem; color:#667; line-height:1.4; text-align:center; margin:6px 0 14px;}
+  .spin{
+    display:inline-block; width:12px; height:12px; border:2px solid #cdd; border-top-color:var(--green);
+    border-radius:50%; animation:spin 0.8s linear infinite; vertical-align:middle; margin-right:4px;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .tb-group{
+    background:var(--card); border:1px solid var(--border); border-radius:10px;
+    padding:14px 16px; margin-bottom:14px;
+  }
+  .tb-group h3{margin:0 0 6px; font-size:1rem; color:var(--green-dark);}
+  .stats-card h3{margin:0 0 8px; font-size:1rem; color:var(--green-dark);}
+  .payouts-gate-card{max-width:360px; margin:20px auto; text-align:center; padding:20px;}
+  .payouts-gate-card h3{margin:0 0 6px; font-size:1.1rem; color:var(--green-dark);}
+  .payouts-gate-card input{
+    width:100%; box-sizing:border-box; padding:10px; margin:12px 0 6px; font-size:1rem;
+    border:1px solid var(--border); border-radius:8px;
+  }
+  .payouts-gate-err{color:var(--red); font-size:.85rem; margin-bottom:8px;}
+  .payouts-gate-card button{
+    width:100%; padding:10px; font-size:1rem; border:none; border-radius:8px;
+    background:var(--green-dark); color:#fff; cursor:pointer;
+  }
+  .payouts-gate-card button:hover{opacity:.9;}
+  .payouts-row{display:flex; gap:16px; flex-wrap:wrap; align-items:flex-start; margin-bottom:14px;}
+  .payouts-row .stats-card{flex:1 1 260px; margin-bottom:0;}
+  .msg-post-card{max-width:480px; margin:0 auto 16px; padding:16px 20px;}
+  .msg-post-card h3{margin:0 0 6px; font-size:1.05rem; color:var(--green-dark);}
+  .msg-post-card select, .msg-post-card textarea{
+    width:100%; box-sizing:border-box; padding:10px; margin:8px 0; font-size:.95rem;
+    border:1px solid var(--border); border-radius:8px; font-family:inherit; resize:vertical;
+  }
+  .msg-post-card button{
+    width:100%; padding:10px; font-size:1rem; border:none; border-radius:8px;
+    background:var(--green-dark); color:#fff; cursor:pointer;
+  }
+  .msg-post-card button:hover{opacity:.9;}
+  .msg-post-card button:disabled{opacity:.6; cursor:default;}
+  .msg-item{
+    background:var(--card); border:1px solid var(--border); border-radius:10px;
+    padding:10px 14px; margin-bottom:10px; max-width:480px; margin-left:auto; margin-right:auto;
+  }
+  .msg-head{display:flex; justify-content:space-between; align-items:baseline; gap:8px; margin-bottom:4px;}
+  .msg-name{font-weight:700; color:var(--green-dark); font-size:.88rem;}
+  .msg-time{font-size:.72rem; color:#889; white-space:nowrap;}
+  .msg-text{font-size:.9rem; line-height:1.4; white-space:pre-wrap; word-break:break-word;}
+  .tb-group.tb-split h3{color:var(--red);}
+  .tb-group.tb-pending h3{color:var(--gold);}
+  .tb-scoreline{font-size:.82rem; color:#556; margin-bottom:10px;}
+  .tb-group table{margin:8px 0 12px; font-size:.8rem;}
+  .tb-group table th, .tb-group table td{border:1px solid var(--border); padding:4px 8px; text-align:center;}
+  .tb-group table td:first-child, .tb-group table th:first-child{text-align:left;}
+  .tb-winner-cell{background:var(--lightgold); font-weight:700;}
+  .tb-draft{
+    background:var(--lightgray); border:1px dashed var(--border); border-radius:6px;
+    padding:10px 12px; font-size:.85rem; white-space:pre-wrap; line-height:1.5; margin-top:6px;
+  }
+  .tb-copybtn{
+    margin-top:8px; padding:5px 12px; border-radius:6px; border:1px solid var(--green);
+    background:#fff; color:var(--green); font-size:.8rem; cursor:pointer;
+  }
+  .tb-copybtn:hover{background:var(--lightgreen);}
+  .tb-copybtn.copied{background:var(--green); color:#fff; border-color:var(--green);}
+  .tb-none{text-align:center; color:#889; font-size:.85rem; padding:20px 0;}
+  .tb-provisional{
+    background:var(--lightgold); border:1px solid var(--gold); border-radius:8px;
+    padding:10px 14px; font-size:.82rem; color:#5a4a10; margin-bottom:16px; line-height:1.5;
+  }
+  .tb-scorecards{margin:12px 0 6px;}
+  .sc-card td.tb-decider{
+    font-weight:700; border-radius:4px; box-shadow:inset 0 0 0 2px #3b6fd4;
+  }
+  .sc-card td.tb-decider:not(.counted){background:#dbe9fb;}
+  .tb-legend{
+    font-size:.72rem; color:#667; margin:0 0 14px; display:flex; gap:16px;
+    flex-wrap:wrap; justify-content:center;
+  }
+  .tb-legend span{display:inline-flex; align-items:center; gap:5px;}
+  .tb-legend i{width:12px; height:12px; border-radius:3px; display:inline-block;}
+  .tb-legend .sw-counted{background:var(--lightgold);}
+  .tb-legend .sw-decider{background:#dbe9fb; box-shadow:inset 0 0 0 1px #6f9ce0;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1 id="pageTitle">Wyndham Championship (TEST) — Live Leaderboard</h1>
+  <p id="eventSub">Sedgefield Country Club</p>
+</header>
+
+<div class="wrap">
+
+  <div class="statusbar">
+    <span id="lastUpdated">Loading…</span>
+    <button id="refreshBtn" type="button">↻ Refresh now</button>
+  </div>
+  <div id="dataError"></div>
+
+  <div class="tabs" id="tabs">
+    <div class="tab active" data-panel="overall">Overall</div>
+    <div class="tab" data-panel="day1">Day 1</div>
+    <div class="tab" data-panel="day2">Day 2</div>
+    <div class="tab" data-panel="day3">Day 3</div>
+    <div class="tab" data-panel="day4">Day 4</div>
+    <div class="tab" data-panel="scorecards">Scorecards</div>
+    <div class="tab" data-panel="tiebreakers">Tiebreakers</div>
+    <div class="tab" data-panel="stats">Stats</div>
+    <div class="tab" data-panel="payouts">Payouts</div>
+    <div class="tab" data-panel="messages">Message Board</div>
+  </div>
+
+  <div class="panel active" id="panel-overall"><div class="tb-provisional" id="unofficial-overall" style="display:none;"></div><div class="card"><div class="note">An entry needs more than 5 of their 15 picks still posting real scores (not cut or withdrawn) to stay eligible here -- entries that don't qualify are shown as DNQ below.</div><table id="tbl-overall"></table><div class="note" id="tbl-overall-note" style="display:none;">* = live running total (best 5 of however many of that entry's picks have posted so far) -- not final until 5+ have scores.</div></div></div>
+  <div class="panel" id="panel-day1"><div class="tb-provisional" id="unofficial-day1" style="display:none;"></div><div class="card"><table id="tbl-day1"></table><div class="note" id="tbl-day1-note" style="display:none;">* = live running total (best 10 of however many have posted so far) -- not final until 10+ have scores.</div></div></div>
+  <div class="panel" id="panel-day2"><div class="tb-provisional" id="unofficial-day2" style="display:none;"></div><div class="card"><table id="tbl-day2"></table><div class="note" id="tbl-day2-note" style="display:none;">* = live running total (best 10 of however many have posted so far) -- not final until 10+ have scores.</div></div></div>
+  <div class="panel" id="panel-day3"><div class="tb-provisional" id="unofficial-day3" style="display:none;"></div><div class="card"><div class="note">An entry needs more than 5 of their 15 picks still posting real scores (not cut or withdrawn) to stay eligible here -- entries that don't qualify are shown as DNQ below.</div><table id="tbl-day3"></table><div class="note" id="tbl-day3-note" style="display:none;">* = live running total (best 5 of however many have posted so far) -- not final until 5+ have scores.</div></div></div>
+  <div class="panel" id="panel-day4"><div class="tb-provisional" id="unofficial-day4" style="display:none;"></div><div class="card"><div class="note">An entry needs more than 5 of their 15 picks still posting real scores (not cut or withdrawn) to stay eligible here -- entries that don't qualify are shown as DNQ below.</div><table id="tbl-day4"></table><div class="note" id="tbl-day4-note" style="display:none;">* = live running total (best 5 of however many have posted so far) -- not final until 5+ have scores.</div></div></div>
+  <div class="panel" id="panel-scorecards">
+    <input type="text" class="searchbox" id="scSearch" placeholder="Search entry name…">
+    <div class="note">Every entry's 15 picks, live round-by-round scores (vs. par), and running total. <span class="live-mark" style="background:var(--lightgold); padding:1px 6px; border-radius:4px; color:var(--text); font-weight:700;">highlighted</span> scores are the ones actually counting toward that column's total right now.</div>
+    <div class="scorecard-grid" id="scorecardGrid"></div>
+  </div>
+  <div class="panel" id="panel-tiebreakers">
+    <div class="note">Only payout-relevant ties show here: the Daily winner (Day 1-4, populates once that
+      round is final), and Overall places 1-<span id="tb-payout-spots-note"></span> (live, updates as
+      scores come in). Resolved per the season rules: compare each tied entry's next-best
+      pick beyond the ones that count (11th pick for Day 1/2, 6th pick for Day 3/4/Overall), lowest
+      score wins that level, repeat until broken. If all 15 picks tie, the spot(s) split. Each card has
+      a starter paragraph you can copy into the results email and dress up.</div>
+    <div class="tbtabs" id="tbTabs">
+      <div class="tbtab active" data-tbpanel="day1">Day 1</div>
+      <div class="tbtab" data-tbpanel="day2">Day 2</div>
+      <div class="tbtab" data-tbpanel="day3">Day 3</div>
+      <div class="tbtab" data-tbpanel="day4">Day 4</div>
+      <div class="tbtab" data-tbpanel="overall">Overall</div>
+    </div>
+    <div class="tbpanel active" id="tbpanel-day1"><div id="tiebreakerReport-day1"></div></div>
+    <div class="tbpanel" id="tbpanel-day2"><div id="tiebreakerReport-day2"></div></div>
+    <div class="tbpanel" id="tbpanel-day3"><div id="tiebreakerReport-day3"></div></div>
+    <div class="tbpanel" id="tbpanel-day4"><div id="tiebreakerReport-day4"></div></div>
+    <div class="tbpanel" id="tbpanel-overall"><div id="tiebreakerReport-overall"></div></div>
+  </div>
+  <div class="panel" id="panel-stats">
+    <div class="note">How many entries picked each golfer, and their to-par score each round -- pulled live from
+      the same picks and scores everything else on this page uses. Only golfers someone actually picked show up
+      here (not the full field).</div>
+    <div id="statsGrid"></div>
+  </div>
+  <div class="panel" id="panel-payouts">
+    <div class="payouts-gate-card card" id="payoutsGate">
+      <h3>Payouts</h3>
+      <div class="note">This section is password protected. Enter the pool password to view.</div>
+      <input type="password" id="payoutsPassword" placeholder="Password">
+      <div class="payouts-gate-err" id="payoutsErr" style="display:none;">Incorrect password.</div>
+      <button id="payoutsUnlockBtn">Unlock</button>
+    </div>
+    <div id="payoutsContent" style="display:none;">
+      <div class="note">Manually maintained -- prize amounts and winners are updated by hand as results are decided,
+        not calculated live.</div>
+      <div id="payoutsGrid"></div>
+    </div>
+  </div>
+  <div class="panel" id="panel-messages">
+    <div class="card msg-post-card">
+      <h3>Post a message</h3>
+      <select id="msgName"><option value="">Choose your name…</option></select>
+      <textarea id="msgText" maxlength="500" rows="3" placeholder="Say something to the pool…"></textarea>
+      <div class="payouts-gate-err" id="msgErr" style="display:none;"></div>
+      <button id="msgPostBtn">Post</button>
+    </div>
+    <div class="note">Open to anyone -- please keep it civil. Your name comes from the live entry list
+      (not free text) so posts can't be attributed to someone who isn't actually in the pool.</div>
+    <div id="messageFeed"></div>
+  </div>
+
+  <p class="note" id="footNote"></p>
+</div>
+
+<script>
+/* ====================== CONFIG — edit this each tournament ====================== */
+const TOURNAMENT_NAME = "Wyndham Championship (TEST) — Sedgefield Country Club";
+const PICKS_TSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vScRxv9AHrLvuftk8SFvhqdsQaENzrTydEgKbG7ow_ii56TNm7uKcJoO9maExpeERnsBCY5xzzvibdS/pub?gid=269052519&single=true&output=tsv";
+const ESPN_EVENT_ID = "401811961"; // ESPN's internal event id for this tournament -- from their /scoreboard?dates=YYYY calendar
+const PAR = 70;
+const REFRESH_MS = 90 * 1000; // how often to auto re-pull live data
+const GROUP_PICKS = {"Group A": 5, "Group B": 4, "Group C": 3, "Group D": 2, "Group E": 1}; // 15 total picks per entrant
+const POOL_TIMEZONE = "America/New_York"; // must match the Google Sheet's configured timezone (Submitted At column)
+const OVERALL_PAYOUT_SPOTS = 6; // how many Overall places get paid, per the rules doc -- bump this up as the pool grows
+const OVERALL_TIEBREAK_DISPLAY_CAP = 6; // tiebreaker tab tracks ties through this place even if payout spots are fewer right now (room for the pool to grow) -- never shows 7th place or beyond
+// ESPN occasionally lags on flagging a golfer as withdrawn -- their score sits blank ("-") but
+// their status never actually switches to "Withdrawn", which blocks round-complete detection
+// (isRoundComplete) and skips the automatic alternate substitution (lookupGolfer) for anyone who
+// picked them. Add a golfer's name here EXACTLY as ESPN displays it to manually treat them as
+// withdrawn until ESPN's own data catches up -- safe to leave entries in permanently, since once
+// ESPN flags them WD on their own this has no additional effect. Remove the name once you no
+// longer need it, just to keep the list tidy.
+const MANUAL_WD_OVERRIDES = [];
+// DNQ (did not qualify) rule: an entry needs MORE than this many of their 15 picks still posting
+// real scores (i.e. not shown as CUT or WD, and with a live ESPN match) to stay eligible for Day
+// 3, Day 4, and Overall standings/payouts. 5 or fewer qualifying picks -> DNQ, dropped from those
+// three rankings and tiebreakers (their raw score still shows, just marked DNQ instead of ranked).
+// Day 1 and Day 2 are never affected by this. Naturally a no-op until the field actually gets cut.
+const DNQ_MIN_QUALIFYING = 5;
+// Keep this in sync with WyndhamPicks.html's ENTRY_PASSWORD -- same password gates both the picks
+// form and this Payouts tab.
+const PAYOUTS_PASSWORD = "Mgc2026";
+// Manually maintained -- update Winner as results are decided (edit here, then push via GitHub
+// Desktop like everything else on this page). Not auto-computed from live scores.
+// Daily prize is $75/day for now -- this depends on final 2027 entry count (won't be known until
+// Feb 2027), so it may change. If a day ties, split the prize evenly rounded DOWN to the whole
+// dollar and list both names in "winner" (e.g. "Shane Hunt / Chad Carmichael"); the leftover
+// dollar(s) from the rounding stay with the pool -- e.g. a $75 tie splits $37/$37, pool keeps $1.
+const PAYOUTS = [
+  { tournament: "Wyndham Championship (TEST)", category: "Day 1", prize: "$75", winner: "" },
+  { tournament: "Wyndham Championship (TEST)", category: "Day 2", prize: "$75", winner: "" },
+  { tournament: "Wyndham Championship (TEST)", category: "Day 3", prize: "$75", winner: "" },
+  { tournament: "Wyndham Championship (TEST)", category: "Day 4", prize: "$75", winner: "" },
+  { tournament: "Wyndham Championship (TEST)", category: "Overall 1st", prize: "$300", winner: "" },
+  { tournament: "Wyndham Championship (TEST)", category: "Overall 2nd", prize: "$180", winner: "" },
+  { tournament: "Wyndham Championship (TEST)", category: "Overall 3rd", prize: "$140", winner: "" },
+  { tournament: "Wyndham Championship (TEST)", category: "Overall 4th", prize: "$100", winner: "" },
+  { tournament: "Wyndham Championship (TEST)", category: "Overall 5th", prize: "$80", winner: "" },
+  { tournament: "Wyndham Championship (TEST)", category: "Overall 6th", prize: "$20", winner: "" },
+];
+// Message Board -- posts go through the same Apps Script Web App as the pick forms (Rocket/WyndhamPicks.html).
+// SUBMIT_URL/SUBMIT_SECRET here must exactly match the pick forms' values and the Apps Script's
+// SHARED_SECRET. Open to anyone (no page password) -- posters pick their name from the live entrant
+// list instead of typing free text, so a post can't be attributed to someone who isn't in the pool.
+// No automated moderation: if something inappropriate gets posted, delete that row directly in the
+// "Message Board" tab of the Sheet.
+const SUBMIT_URL = "https://script.google.com/macros/s/AKfycbxJp18dq8iLJzVAd-27eSvmZPJeGX-ERJxiHK3-aF0-v84_02ZheefVgIzAW4gxNCJOHw/exec"; // same Web App URL the pick forms post to
+const SUBMIT_SECRET = "Majors2026"; // must match SHARED_SECRET in the Apps Script
+// Publish the "Message Board" Sheet tab to the web (File > Share > Publish to web -- same steps
+// used for PICKS_TSV_URL above) once it exists, then paste the resulting TSV link here. The tab
+// gets created automatically the first time anyone posts a message, so it won't exist to publish
+// until after that first post.
+const MESSAGES_TSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vScRxv9AHrLvuftk8SFvhqdsQaENzrTydEgKbG7ow_ii56TNm7uKcJoO9maExpeERnsBCY5xzzvibdS/pub?gid=431618619&single=true&output=tsv";
+const MAX_MESSAGE_LENGTH = 500;
+/* =================================================================================== */
+
+/* ---- Picks TSV column layout (0-indexed), matches the Google Sheet / Apps Script schema ---- */
+const COL = {
+  name: 0,
+  groupA: [1,2,3,4,5], groupAAlt: 6,
+  groupB: [7,8,9,10], groupBAlt: 11,
+  groupC: [12,13,14], groupCAlt: 15,
+  groupD: [16,17], groupDAlt: 18,
+  groupE: [19], groupEAlt: 20,
+  submittedAt: 21,
+  lastName: 22,
+};
+const SLOTS = [ // (pick column, alt column) for each of the 15 pick "slots", in Scoring-tab order
+  ...COL.groupA.map(c => [c, COL.groupAAlt]),
+  ...COL.groupB.map(c => [c, COL.groupBAlt]),
+  ...COL.groupC.map(c => [c, COL.groupCAlt]),
+  ...COL.groupD.map(c => [c, COL.groupDAlt]),
+  ...COL.groupE.map(c => [c, COL.groupEAlt]),
+];
+
+/* ====================== small utilities ====================== */
+function normalizeName(s) {
+  // Strips accents (Séamus -> Seamus) via NFD decomposition, PLUS a manual table for Nordic/
+  // other letters that are their own distinct Unicode code points rather than base+diacritic
+  // (ø, æ, å, etc. don't decompose under NFD -- "Højgaard" would stay "højgaard" without this).
+  // Also strips periods/commas and collapses whitespace. Used on BOTH sides (Picks names and
+  // ESPN names) so accented and plain-ASCII spellings of the same golfer line up.
+  if (!s) return "";
+  const manualMap = { "ø":"o","Ø":"o","æ":"ae","Æ":"ae","å":"a","Å":"a","ß":"ss",
+    "ð":"d","Ð":"d","þ":"th","Þ":"th","đ":"d","Đ":"d","ł":"l","Ł":"l" };
+  let out = s.normalize("NFD").replace(/[̀-ͯ]/g, "");
+  out = out.replace(/[øØæÆåÅßðÐþÞđĐłŁ]/g, ch => manualMap[ch] || ch);
+  return out.replace(/[.,]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function parseTSV(text) {
+  const lines = text.replace(/\r/g, "").split("\n").filter(l => l.length > 0);
+  if (lines.length < 2) return [];
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    rows.push(lines[i].split("\t"));
+  }
+  return rows;
+}
+
+function parseSheetTimestamp(s) {
+  if (!s) return null;
+  const t = new Date(s).getTime();
+  return isNaN(t) ? null : t;
+}
+
+function utcToPoolTime(utcIso) {
+  // Converts a UTC ISO timestamp (e.g. ESPN's teeTime "2026-07-30T11:00Z") into the pool's
+  // timezone. Returns two things:
+  //  - parseable: an "M/D/YYYY H:MM:SS" string, deliberately built to look just like the
+  //    "Submitted At" strings Google Sheets writes. When a browser naively parses (new Date(...))
+  //    BOTH this string and a real submittedAt string, any bias from the browser not actually
+  //    being in the pool's timezone applies equally to both -- so their relative order (which is
+  //    all the lock-time check needs) comes out correct even without real timezone math.
+  //  - display: a human-readable string for showing in the UI, formatted directly from the
+  //    correct source Date (no re-parsing, so no double timezone conversion).
+  const d = new Date(utcIso);
+  const parts = {};
+  for (const p of new Intl.DateTimeFormat("en-US", {
+    timeZone: POOL_TIMEZONE, year: "numeric", month: "numeric", day: "numeric",
+    hour: "numeric", minute: "2-digit", second: "2-digit", hour12: false,
+  }).formatToParts(d)) parts[p.type] = p.value;
+  const hour24 = parts.hour === "24" ? "0" : parts.hour;
+  const parseable = `${parts.month}/${parts.day}/${parts.year} ${hour24}:${parts.minute}:${parts.second}`;
+  const display = new Intl.DateTimeFormat("en-US", {
+    timeZone: POOL_TIMEZONE, month: "short", day: "numeric",
+    hour: "numeric", minute: "2-digit", hour12: true, timeZoneName: "short",
+  }).format(d);
+  return { parseable, display };
+}
+
+function showError(msg) {
+  const box = document.getElementById("dataError");
+  box.style.display = "block";
+  box.textContent = msg;
+}
+function clearError() {
+  document.getElementById("dataError").style.display = "none";
+}
+
+/* ====================== fetch: picks ====================== */
+async function fetchPicks() {
+  const res = await fetch(PICKS_TSV_URL, { cache: "no-store" });
+  if (!res.ok) throw new Error("Could not load picks (HTTP " + res.status + ")");
+  const text = await res.text();
+  const rows = parseTSV(text);
+
+  // Returns EVERY submission row as-is (not deduped) -- picking which one counts per entrant
+  // happens in selectEntrants(), since that decision now depends on the picks-lock time, which
+  // isn't known until fetchScores() has also run.
+  const submissions = [];
+  for (const r of rows) {
+    const fullName = (r[COL.name] || "").trim();
+    if (!fullName) continue;
+    const lastName = (r[COL.lastName] || "").trim();
+    const firstName = lastName && fullName.endsWith(lastName)
+      ? fullName.slice(0, fullName.length - lastName.length).trim()
+      : fullName;
+    const key = normalizeName(lastName) + "|" + normalizeName(firstName);
+    const submittedAt = r[COL.submittedAt] || "";
+    const picks = SLOTS.map(([pickCol, altCol]) => ({
+      primary: (r[pickCol] || "").trim(),
+      alt: (r[altCol] || "").trim(),
+    }));
+    submissions.push({ key, fullName, lastName, firstName, submittedAt, picks });
+  }
+  return submissions;
+}
+
+/* ====================== resolve one submission per entrant, honoring the picks lock ====================== */
+function selectEntrants(submissions, lockTime) {
+  // lockTime is the {parseable, display} object from utcToPoolTime(), or null if Round 1 hasn't
+  // produced a real score yet (picks stay open with no cutoff).
+  const lockMs = lockTime ? parseSheetTimestamp(lockTime.parseable) : null;
+  const groups = new Map();
+  for (const s of submissions) {
+    if (!groups.has(s.key)) groups.set(s.key, []);
+    groups.get(s.key).push({ ...s, ms: parseSheetTimestamp(s.submittedAt) });
+  }
+  const out = [];
+  for (const list of groups.values()) {
+    const onTime = lockMs == null ? list : list.filter(s => s.ms == null || s.ms <= lockMs);
+    if (onTime.length > 0) {
+      // Latest on-time submission wins -- this is a simplified stand-in for Workbook A's full
+      // duplicate/late-approval workflow, which involves a manual review step that doesn't make
+      // sense for a fully-automatic public page.
+      const best = onTime.reduce((a, b) => (b.ms ?? -Infinity) > (a.ms ?? -Infinity) ? b : a);
+      out.push({ ...best, locked: false });
+    } else {
+      // Every submission this entrant made came in after the lock. Keep them visible (using
+      // their earliest attempt, just for name/timestamp display) rather than silently dropping
+      // them, but clear their picks so nothing scores.
+      const earliestLate = list.reduce((a, b) => (b.ms ?? Infinity) < (a.ms ?? Infinity) ? b : a);
+      out.push({ ...earliestLate, picks: SLOTS.map(() => ({ primary: "", alt: "" })), locked: true });
+    }
+  }
+  return out;
+}
+
+/* ====================== fetch: live scores ====================== */
+async function fetchScores() {
+  const url = "https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard/" + ESPN_EVENT_ID;
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) throw new Error("Could not load live scores (HTTP " + res.status + ")");
+  const data = await res.json();
+  // ESPN's bare /scoreboard endpoint wraps results in {events:[...]}, but hitting a specific
+  // event via /scoreboard/{id} returns that event object directly at the top level instead --
+  // confirmed empirically (the two shapes are genuinely different, not a guess). Handle both.
+  const event = (data.events && data.events[0]) || (data.competitions ? data : null);
+  if (!event) throw new Error("ESPN returned no event data for id " + ESPN_EVENT_ID);
+  const comp = event.competitions && event.competitions[0];
+  const competitors = (comp && comp.competitors) || [];
+
+  const map = new Map(); // normalized name -> {rawName, r1,r2,r3,r4 (each vs. par), status}
+  let roundOneStarted = false;      // true once ANY competitor has a real posted Round 1 score
+  let earliestR1TeeTimeUTC = null;  // earliest Round 1 tee time across the whole field
+  // ESPN's own c.status field is unreliable for this endpoint -- confirmed empirically that it
+  // comes back completely empty for this event (no "cut"/"withdrawn" text anywhere in the feed),
+  // even though ESPN's own website clearly shows CUT for the right players. Their site pulls that
+  // from a different, non-public, non-CORS-enabled data source we can't fetch directly. Instead,
+  // detect a cut the same way their missing data implies it: once Round 3 has been set up for the
+  // field at all (ANY competitor has a period-3 linescore entry -- even just a "-" placeholder for
+  // "hasn't teed off yet"), anyone whose linescores array has NO period-3 entry at all didn't make
+  // the cut. Verified against ESPN's own site data: 100% match across the full 147-player field.
+  const round3Available = competitors.some(c =>
+    Array.isArray(c.linescores) && c.linescores.some(ls => ls.period === 3)
+  );
+  for (const c of competitors) {
+    const rawName = c.athlete && c.athlete.displayName;
+    if (!rawName) continue;
+    const rounds = { 1: null, 2: null, 3: null, 4: null };
+    if (Array.isArray(c.linescores)) {
+      for (const ls of c.linescores) {
+        const period = ls.period;
+        if (period === 1 && ls.teeTime) {
+          if (!earliestR1TeeTimeUTC || ls.teeTime < earliestR1TeeTimeUTC) earliestR1TeeTimeUTC = ls.teeTime;
+        }
+        // ESPN's round-level linescore entry carries BOTH the raw stroke count (value: 70) and
+        // an already-computed to-par string (displayValue: "-2", "E", "+3") -- using their own
+        // computed to-par directly means this page never needs its own PAR constant to agree
+        // with the real course par, which could otherwise drift out of sync tournament to
+        // tournament. parseToPar("E") -> 0, parseToPar("-2") -> -2, parseToPar("+3") -> 3.
+        if (period >= 1 && period <= 4 && ls.displayValue != null && ls.displayValue !== "") {
+          rounds[period] = parseToPar(ls.displayValue);
+          if (period === 1) roundOneStarted = true;
+        }
+      }
+    }
+    const statusDesc = (c.status && c.status.type && (c.status.type.description || c.status.type.name)) || "";
+    const isManualWD = MANUAL_WD_OVERRIDES.some(n => normalizeName(n) === normalizeName(rawName));
+    const isWD = /withdr|wd/i.test(statusDesc) || isManualWD;
+    // Check WD first and exclude it from the cut check -- a withdrawn golfer also has no period-3
+    // entry, but should show/count as WD, not CUT.
+    const hasR3Entry = Array.isArray(c.linescores) && c.linescores.some(ls => ls.period === 3);
+    const isCut = !isWD && (/cut/i.test(statusDesc) || (round3Available && !hasR3Entry));
+    map.set(normalizeName(rawName), {
+      rawName, r1: rounds[1], r2: rounds[2], r3: rounds[3], r4: rounds[4],
+      cut: isCut, wd: isWD,
+    });
+  }
+
+  // Picks lock the moment the first real Round 1 score actually shows up -- proof play has
+  // started -- rather than trusting a configured start time that could be wrong or missing. The
+  // cutoff INSTANT used is the earliest Round 1 tee time (a fixed point), not "whenever we
+  // happened to poll", so the lock doesn't creep later depending on refresh timing.
+  const lockTime = (roundOneStarted && earliestR1TeeTimeUTC) ? utcToPoolTime(earliestR1TeeTimeUTC) : null;
+
+  return {
+    map, eventName: event.name || TOURNAMENT_NAME,
+    status: (event.status && event.status.type && event.status.type.description) || "",
+    lockTime,
+  };
+}
+
+function parseToPar(displayValue) {
+  const s = String(displayValue).trim();
+  if (s === "E" || s === "") return 0;
+  const n = parseInt(s.replace("+", ""), 10);
+  return isNaN(n) ? null : n;
+}
+
+/* ====================== golfer resolution (mirrors Workbook B's Scoring tab) ====================== */
+function lookupGolfer(name, scoresMap) {
+  const norm = normalizeName(name);
+  if (!norm) return null;
+  if (scoresMap.has(norm)) return scoresMap.get(norm);
+  // Fallback: substring match either direction (handles minor formatting drift between the
+  // Picks list and ESPN's displayName -- same "flexible but bounded" idea as the Excel matching).
+  for (const [key, val] of scoresMap.entries()) {
+    if (key.includes(norm) || norm.includes(key)) return val;
+  }
+  return null;
+}
+
+function resolvePick(pickSlot, scoresMap) {
+  // If the primary pick withdrew, fall back to the alternate -- same rule as Scoring!Resolved.
+  let name = pickSlot.primary;
+  let g = name ? lookupGolfer(name, scoresMap) : null;
+  if (g && g.wd && pickSlot.alt) {
+    const altG = lookupGolfer(pickSlot.alt, scoresMap);
+    if (altG) { name = pickSlot.alt; g = altG; }
+  }
+  return { name, golfer: g };
+}
+
+function golferRoundVsPar(golfer, roundNum) {
+  // golfer.r1-r4 are already vs-par values (from ESPN's displayValue, e.g. "-2" -> -2),
+  // not raw stroke counts, so no PAR subtraction here.
+  if (!golfer) return null;
+  const val = golfer["r" + roundNum];
+  return (val == null) ? null : val; // round not yet posted -> null
+}
+
+function golferTotal(golfer, r1, r2, r3, r4) {
+  // This is the golfer's FINAL 4-round total, for the per-golfer row's "Total" column. Only
+  // actually shows "CUT"/"WD" when ESPN says so -- missing rounds just because the tournament
+  // hasn't gotten there yet (e.g. it's still Round 1) are blank, not "CUT". A pick with no live
+  // ESPN match at all (wrong golfer name / not actually in the field) is also blank here, not
+  // "CUT" -- that's a data problem, not a real cut, and the "(no live match)" label next to the
+  // name already flags it.
+  if (!golfer) return null;
+  if (golfer.cut) return "CUT";
+  if (golfer.wd) return "WD";
+  if (r1 == null || r2 == null || r3 == null || r4 == null) return null;
+  return r1 + r2 + r3 + r4;
+}
+
+function golferRunningTotal(golfer, r1, r2, r3, r4) {
+  // Live/running total for the Overall aggregate: sum of whichever rounds this golfer has
+  // posted so far, not just once all 4 are in (mirrors the Day1-4 "live" approach). CUT/WD
+  // golfers are excluded entirely (null) so best-5 selection skips them, same convention as the
+  // Excel workbooks' literal "CUT" text making SMALL() skip that golfer.
+  if (!golfer || golfer.cut || golfer.wd) return null;
+  const rounds = [r1, r2, r3, r4].filter(v => typeof v === "number");
+  if (rounds.length === 0) return null;
+  return rounds.reduce((a, b) => a + b, 0);
+}
+
+/* ====================== per-entrant computation ====================== */
+function sumLowest(values, n) {
+  // Live/running total: once at least one pick has a real score, sum the best min(n, available)
+  // of them -- so a day shows a real number as soon as ANY golfer has posted, not just once all
+  // `n` required golfers have. Once `n` or more golfers are in, this naturally becomes the real
+  // "best n of 15" rule since that's exactly min(n, available) at that point. Returns null only
+  // when literally nobody in this group has a score yet.
+  const nums = values.filter(v => typeof v === "number" && !isNaN(v));
+  if (nums.length === 0) return null;
+  nums.sort((a, b) => a - b);
+  const take = Math.min(n, nums.length);
+  let sum = 0;
+  for (let i = 0; i < take; i++) sum += nums[i];
+  return sum;
+}
+function countAvailable(values) {
+  return values.filter(v => typeof v === "number" && !isNaN(v)).length;
+}
+function bestIndices(values, n) {
+  // Returns the Set of original array indices whose value is one of the min(n, available)
+  // actually summed by sumLowest(values, n) -- used to highlight which golfers are counting
+  // toward a given total. Sort is stable, so a tie sitting right on the cutoff line resolves the
+  // same way sumLowest itself resolves it (original pick order).
+  const withIdx = values.map((v, i) => ({ v, i })).filter(x => typeof x.v === "number" && !isNaN(x.v));
+  withIdx.sort((a, b) => a.v - b.v);
+  const take = Math.min(n, withIdx.length);
+  return new Set(withIdx.slice(0, take).map(x => x.i));
+}
+
+function computeEntrant(entrant, scoresMap) {
+  const slots = entrant.picks.map(p => {
+    const { name, golfer } = resolvePick(p, scoresMap);
+    const r1 = golferRoundVsPar(golfer, 1);
+    const r2 = golferRoundVsPar(golfer, 2);
+    const r3 = golferRoundVsPar(golfer, 3);
+    const r4 = golferRoundVsPar(golfer, 4);
+    const total = golferTotal(golfer, r1, r2, r3, r4);
+    const liveTotal = golferRunningTotal(golfer, r1, r2, r3, r4);
+    return { name: name || "(no pick)", r1, r2, r3, r4, total, liveTotal, found: !!golfer };
+  });
+  const r1s = slots.map(s => s.r1), r2s = slots.map(s => s.r2);
+  const r3s = slots.map(s => s.r3), r4s = slots.map(s => s.r4);
+  const liveTotals = slots.map(s => s.liveTotal);
+  const day1 = sumLowest(r1s, 10), day2 = sumLowest(r2s, 10);
+  const day3 = sumLowest(r3s, 5), day4 = sumLowest(r4s, 5);
+  const overall = sumLowest(liveTotals, 5);
+  // "Partial" = fewer than the required count have posted yet, so the number shown is a live
+  // running total rather than the final "best n of 15" -- flagged in the UI with a small marker.
+  const day1Partial = day1 != null && countAvailable(r1s) < 10;
+  const day2Partial = day2 != null && countAvailable(r2s) < 10;
+  const day3Partial = day3 != null && countAvailable(r3s) < 5;
+  const day4Partial = day4 != null && countAvailable(r4s) < 5;
+  const overallPartial = overall != null && countAvailable(liveTotals) < 5;
+  // Which golfer rows are actually counting toward each total -- for highlighting in the UI.
+  const day1Idx = bestIndices(r1s, 10), day2Idx = bestIndices(r2s, 10);
+  const day3Idx = bestIndices(r3s, 5), day4Idx = bestIndices(r4s, 5);
+  const overallIdx = bestIndices(liveTotals, 5);
+  // DNQ check -- see DNQ_MIN_QUALIFYING comment. "Qualifying" = has a live ESPN match and isn't
+  // shown as CUT or WD, i.e. still actually posting real scores.
+  const qualifyingPicks = slots.filter(s => s.found && s.total !== "CUT" && s.total !== "WD").length;
+  const dnq = qualifyingPicks <= DNQ_MIN_QUALIFYING;
+  return {
+    ...entrant, slots, day1, day2, day3, day4, overall,
+    day1Partial, day2Partial, day3Partial, day4Partial, overallPartial,
+    day1Idx, day2Idx, day3Idx, day4Idx, overallIdx,
+    qualifyingPicks, dnq,
+  };
+}
+
+/* ====================== ranking with tie-handling ====================== */
+function rankWithTies(entrants, key) {
+  // DNQ entries (see DNQ_MIN_QUALIFYING) are excluded from ranking/tiebreaking on Day 3, Day 4,
+  // and Overall -- their score still displays elsewhere, they just don't get a rank here, same as
+  // if they had no score at all. Day 1/Day 2 are never affected.
+  const dnqApplies = key === "day3" || key === "day4" || key === "overall";
+  const pool = dnqApplies ? entrants.filter(e => !e.dnq) : entrants;
+  const withScore = pool.filter(e => typeof e[key] === "number");
+  withScore.sort((a, b) => a[key] - b[key]);
+  const out = [];
+  let rank = 0, seen = 0, lastScore = null;
+  for (const e of withScore) {
+    seen++;
+    if (e[key] !== lastScore) { rank = seen; lastScore = e[key]; }
+    out.push({ ...e, rank, tied: withScore.filter(x => x[key] === e[key]).length > 1 });
+  }
+  return out;
+}
+
+// rankWithTies() returns copies (not the same object references as `computed`), so this stashes
+// each entrant's Day1-4/Overall rank onto their real computed object via `.ranks`, keyed by the
+// entrant's stable `.key` (normalized last|first name). Used to show a small rank badge on each
+// scorecard next to R1-R4/Total, right in the header of each entrant's own mini table.
+function attachRanks(computed) {
+  const dayKeys = ["day1", "day2", "day3", "day4", "overall"];
+  const byKey = {};
+  for (const e of computed) byKey[e.key] = {};
+  for (const dk of dayKeys) {
+    for (const r of rankWithTies(computed, dk)) byKey[r.key][dk] = { rank: r.rank, tied: r.tied };
+  }
+  for (const e of computed) e.ranks = byKey[e.key];
+}
+
+function fmtScore(n) {
+  if (n == null) return "–";
+  if (n === 0) return "E";
+  return n > 0 ? "+" + n : String(n);
+}
+// Adds a small "*" marker when a total is a live running total (not all required golfers have
+// posted yet) rather than the final "best n of 15" number.
+function fmtScoreLive(n, partial) {
+  return fmtScore(n) + (partial ? '<span class="live-mark" title="Live running total -- not all golfers have posted yet">*</span>' : "");
+}
+function fmtStanding(e) {
+  if (e.rank == null) return "–";
+  return e.tied ? `T${e.rank}` : String(e.rank);
+}
+// Small rank badge for a scorecard column header (e.g. "R2" with "T5" underneath) -- blank until
+// that round/overall actually has a score for this entrant, so Day 2-4 stay empty pre-tournament
+// and only populate once live.
+function rankLabel(e, dayKey) {
+  if (e[dayKey] == null) return "";
+  const info = e.ranks && e.ranks[dayKey];
+  if (!info || info.rank == null) return "";
+  return info.tied ? "T" + info.rank : String(info.rank);
+}
+
+/* ====================== rendering ====================== */
+function renderDayTable(tblId, ranked, dayKey, label, dnqEntrants) {
+  const tbl = document.getElementById(tblId);
+  const partialKey = dayKey + "Partial";
+  let html = `<thead><tr><th>Pos</th><th>Entry</th><th class="num">${label}</th></tr></thead><tbody>`;
+  for (const e of ranked) {
+    html += `<tr><td class="rankcell ${e.tied ? 'standing-tie' : ''}">${fmtStanding(e)}</td>` +
+      `<td>${e.fullName}</td><td class="num">${fmtScoreLive(e[dayKey], e[partialKey])}</td></tr>`;
+  }
+  // DNQ entries (5 or fewer picks still posting scores) list at the bottom, alphabetically --
+  // their raw score still shows for reference but they're not ranked and don't count for payouts.
+  if (dnqEntrants && dnqEntrants.length) {
+    const sortedDnq = dnqEntrants.slice().sort((a, b) =>
+      (a.lastName || a.fullName).localeCompare(b.lastName || b.fullName) || a.fullName.localeCompare(b.fullName)
+    );
+    for (const e of sortedDnq) {
+      html += `<tr class="dnq-row"><td class="rankcell cut">DNQ</td>` +
+        `<td>${e.fullName}</td><td class="num cut">${fmtScoreLive(e[dayKey], e[partialKey])}</td></tr>`;
+    }
+  }
+  html += "</tbody>";
+  tbl.innerHTML = html;
+  const note = document.getElementById(tblId + "-note");
+  if (note) note.style.display = ranked.some(e => e[partialKey]) ? "block" : "none";
+}
+
+function renderScorecards(entrants) {
+  const grid = document.getElementById("scorecardGrid");
+  grid.innerHTML = "";
+  for (const e of entrants) {
+    const div = document.createElement("div");
+    div.className = "sc-card";
+    div.dataset.searchKey = normalizeName(e.fullName);
+    let rows = "";
+    e.slots.forEach((s, idx) => {
+      const isCutOrWd = s.total === "CUT" || s.total === "WD";
+      const c1 = e.day1Idx && e.day1Idx.has(idx) ? "counted" : "";
+      const c2 = e.day2Idx && e.day2Idx.has(idx) ? "counted" : "";
+      const c3 = e.day3Idx && e.day3Idx.has(idx) ? "counted" : "";
+      const c4 = e.day4Idx && e.day4Idx.has(idx) ? "counted" : "";
+      const cT = e.overallIdx && e.overallIdx.has(idx) ? "counted" : "";
+      // Total column shows the live running total (sum of whichever rounds this golfer has
+      // posted so far) -- same number that feeds the Overall aggregate -- not just the final
+      // 4-round total, so it's meaningful from Day 1 on and updates as rounds progress.
+      const totalDisplay = isCutOrWd ? s.total : fmtScore(s.liveTotal);
+      // Once a golfer is CUT/WD, Round 3 and Round 4 will never post a score -- show the actual
+      // reason instead of a blank dash, and gray those cells (and the Total cell) out.
+      const r3Display = isCutOrWd ? s.total : fmtScore(s.r3);
+      const r4Display = isCutOrWd ? s.total : fmtScore(s.r4);
+      const c3Class = isCutOrWd ? "sc-cut-cell" : c3;
+      const c4Class = isCutOrWd ? "sc-cut-cell" : c4;
+      const cTClass = isCutOrWd ? "sc-cut-cell" : cT;
+      rows += `<tr><td>${s.name}${s.found ? "" : ' <span class="cut">(no live match)</span>'}</td>` +
+        `<td class="num ${c1}">${fmtScore(s.r1)}</td><td class="num ${c2}">${fmtScore(s.r2)}</td>` +
+        `<td class="num ${c3Class}">${r3Display}</td><td class="num ${c4Class}">${r4Display}</td>` +
+        `<td class="num ${cTClass}">${totalDisplay}</td></tr>`;
+    });
+    const totalRow = e.locked ? "" : `<tr class="sc-total-row">` +
+      `<td>Total (best 10 / best 5)</td>` +
+      `<td class="num">${fmtScoreLive(e.day1, e.day1Partial)}</td>` +
+      `<td class="num">${fmtScoreLive(e.day2, e.day2Partial)}</td>` +
+      `<td class="num">${fmtScoreLive(e.day3, e.day3Partial)}</td>` +
+      `<td class="num">${fmtScoreLive(e.day4, e.day4Partial)}</td>` +
+      `<td class="num">${fmtScoreLive(e.overall, e.overallPartial)}</td></tr>`;
+    div.innerHTML = `
+      <div class="sc-head">
+        <div class="nm">${e.fullName}${e.locked ? '<span class="locked-badge">⚠ Late — not counted</span>' : (e.dnq ? '<span class="dnq-badge">⚠ DNQ — not eligible for Day 3/4/Overall</span>' : '')}</div>
+        <div class="sub">${e.locked ? "Submitted after picks locked (" + e.submittedAt + ") -- picks not counted." : "Day1: " + fmtScoreLive(e.day1, e.day1Partial) + " &nbsp; Day2: " + fmtScoreLive(e.day2, e.day2Partial) + " &nbsp; Day3: " + fmtScoreLive(e.day3, e.day3Partial) + " &nbsp; Day4: " + fmtScoreLive(e.day4, e.day4Partial) + " &nbsp; Overall: " + fmtScoreLive(e.overall, e.overallPartial)}</div>
+      </div>
+      <table>
+        <thead>
+          <tr><th>Player</th><th class="num">R1</th><th class="num">R2</th><th class="num">R3</th><th class="num">R4</th><th class="num">Total</th></tr>
+          <tr class="sc-rank-row">` +
+            `<th class="sc-rank-label">Rank</th>` +
+            `<th class="num">${rankLabel(e, "day1")}</th>` +
+            `<th class="num">${rankLabel(e, "day2")}</th>` +
+            `<th class="num">${rankLabel(e, "day3")}</th>` +
+            `<th class="num">${rankLabel(e, "day4")}</th>` +
+            `<th class="num">${rankLabel(e, "overall")}</th></tr>
+        </thead>
+        <tbody>${rows}${totalRow}</tbody>
+      </table>`;
+    grid.appendChild(div);
+  }
+}
+
+document.getElementById("scSearch").addEventListener("input", (e) => {
+  const q = normalizeName(e.target.value);
+  document.querySelectorAll(".sc-card").forEach(card => {
+    card.style.display = card.dataset.searchKey.includes(q) ? "" : "none";
+  });
+});
+
+/* ====================== tabs ====================== */
+document.getElementById("tabs").addEventListener("click", (e) => {
+  const tab = e.target.closest(".tab");
+  if (!tab) return;
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+  tab.classList.add("active");
+  document.getElementById("panel-" + tab.dataset.panel).classList.add("active");
+});
+
+/* Tiebreakers sub-tabs (Day 1-4 + Overall). Separate element/class from the top nav on purpose --
+   see the .tbtab/.tbpanel CSS comment -- so this selection survives switching top-level tabs. */
+document.getElementById("tbTabs").addEventListener("click", (e) => {
+  const tab = e.target.closest(".tbtab");
+  if (!tab) return;
+  document.querySelectorAll(".tbtab").forEach(t => t.classList.remove("active"));
+  document.querySelectorAll(".tbpanel").forEach(p => p.classList.remove("active"));
+  tab.classList.add("active");
+  document.getElementById("tbpanel-" + tab.dataset.tbpanel).classList.add("active");
+});
+
+/* ====================== payouts (password-gated) ====================== */
+function payoutsTable(title, rows) {
+  const body = rows.map(p =>
+    `<tr><td>${p.category}</td><td class="num">${p.prize}</td>` +
+    `<td>${p.winner ? p.winner : '<span style="color:#889; font-style:italic;">TBD</span>'}</td></tr>`
+  ).join("");
+  return `<div class="card stats-card"><h3>${title}</h3>` +
+    `<table><thead><tr><th>Category</th><th class="num">Prize</th><th>Winner</th></tr></thead>` +
+    `<tbody>${body}</tbody></table></div>`;
+}
+
+function renderPayouts() {
+  const container = document.getElementById("payoutsGrid");
+  const byTournament = new Map();
+  for (const p of PAYOUTS) {
+    if (!byTournament.has(p.tournament)) byTournament.set(p.tournament, []);
+    byTournament.get(p.tournament).push(p);
+  }
+  let html = "";
+  for (const [tournament, rows] of byTournament) {
+    const daily = rows.filter(p => p.category.startsWith("Day"));
+    const overall = rows.filter(p => p.category.startsWith("Overall"));
+    const other = rows.filter(p => !p.category.startsWith("Day") && !p.category.startsWith("Overall"));
+    html += `<h3 style="margin:0 0 8px; color:var(--green-dark);">${tournament}</h3>`;
+    html += `<div class="payouts-row">`;
+    if (daily.length) html += payoutsTable("Daily", daily);
+    if (overall.length) html += payoutsTable("Overall", overall);
+    html += `</div>`;
+    if (other.length) html += `<div class="payouts-row">${payoutsTable("Other", other)}</div>`;
+  }
+  container.innerHTML = html;
+}
+
+function tryUnlockPayouts() {
+  const input = document.getElementById("payoutsPassword");
+  const err = document.getElementById("payoutsErr");
+  if (input.value === PAYOUTS_PASSWORD) {
+    err.style.display = "none";
+    try { sessionStorage.setItem("golfPoolUnlocked", "yes"); } catch (e) { /* ignore */ }
+    document.getElementById("payoutsGate").style.display = "none";
+    document.getElementById("payoutsContent").style.display = "";
+    renderPayouts();
+  } else {
+    err.style.display = "";
+  }
+}
+
+document.getElementById("payoutsUnlockBtn").addEventListener("click", tryUnlockPayouts);
+document.getElementById("payoutsPassword").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") tryUnlockPayouts();
+});
+try {
+  if (sessionStorage.getItem("golfPoolUnlocked") === "yes") {
+    document.getElementById("payoutsGate").style.display = "none";
+    document.getElementById("payoutsContent").style.display = "";
+    renderPayouts();
+  }
+} catch (e) { /* ignore */ }
+
+/* ====================== message board ====================== */
+function escapeHtml(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+// Messages tab columns (from the Apps Script "Message Board" tab): Timestamp, Name, Message.
+async function fetchMessages() {
+  if (!MESSAGES_TSV_URL) return []; // not published yet -- see the MESSAGES_TSV_URL comment above
+  const res = await fetch(MESSAGES_TSV_URL, { cache: "no-store" });
+  if (!res.ok) throw new Error("Could not load messages (HTTP " + res.status + ")");
+  const text = await res.text();
+  const rows = parseTSV(text);
+  return rows.map(r => ({
+    ts: parseSheetTimestamp(r[0]),
+    name: (r[1] || "").trim(),
+    message: (r[2] || "").trim(),
+  })).filter(m => m.message);
+}
+
+// Keeps the name dropdown in sync with whoever's actually submitted picks -- this is what makes
+// "pick your name" work instead of free text, without needing a separately-maintained roster.
+function renderMessageNameOptions(computed) {
+  const sel = document.getElementById("msgName");
+  if (!sel) return;
+  const current = sel.value;
+  const names = [...new Set(computed.map(e => e.fullName))].sort((a, b) => a.localeCompare(b));
+  sel.innerHTML = '<option value="">Choose your name…</option>' +
+    names.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join("");
+  if (names.includes(current)) sel.value = current;
+}
+
+function renderMessageFeed(messages) {
+  const feed = document.getElementById("messageFeed");
+  if (!feed) return;
+  if (!MESSAGES_TSV_URL) {
+    feed.innerHTML = '<div class="note">Message board isn\'t fully set up yet -- MESSAGES_TSV_URL needs to be filled in.</div>';
+    return;
+  }
+  if (!messages.length) {
+    feed.innerHTML = '<div class="note">No messages yet -- be the first to post.</div>';
+    return;
+  }
+  const sorted = messages.slice().sort((a, b) => (b.ts ?? 0) - (a.ts ?? 0));
+  feed.innerHTML = sorted.map(m => (
+    `<div class="msg-item"><div class="msg-head"><span class="msg-name">${escapeHtml(m.name)}</span>` +
+    (m.ts ? `<span class="msg-time">${new Date(m.ts).toLocaleString()}</span>` : "") +
+    `</div><div class="msg-text">${escapeHtml(m.message)}</div></div>`
+  )).join("");
+}
+
+let lastMessagePostAt = 0;
+function postMessage() {
+  const nameSel = document.getElementById("msgName");
+  const textEl = document.getElementById("msgText");
+  const errEl = document.getElementById("msgErr");
+  errEl.style.display = "none";
+  const name = nameSel.value;
+  const message = textEl.value.trim();
+  if (!name) { errEl.textContent = "Pick your name first."; errEl.style.display = ""; return; }
+  if (!message) { errEl.textContent = "Message can't be empty."; errEl.style.display = ""; return; }
+  // Simple client-side throttle (one post per 15s) to cut down on accidental double-taps and
+  // casual spam -- not real bot protection, that's what SUBMIT_SECRET is for.
+  const now = Date.now();
+  if (now - lastMessagePostAt < 15000) {
+    errEl.textContent = "Hang on a few seconds before posting again.";
+    errEl.style.display = "";
+    return;
+  }
+  lastMessagePostAt = now;
+  const trimmedMessage = message.substring(0, MAX_MESSAGE_LENGTH);
+  const btn = document.getElementById("msgPostBtn");
+  btn.disabled = true;
+  // Apps Script Web Apps don't send CORS headers, so the browser gets an opaque response with
+  // fetch -- same limitation as the pick forms' submit -- so this can't actually confirm the
+  // POST landed server-side. Show it optimistically right away instead of waiting on the TSV feed,
+  // which can lag a few minutes behind a fresh edit anyway.
+  fetch(SUBMIT_URL, {
+    method: "POST",
+    mode: "no-cors",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify({ secret: SUBMIT_SECRET, type: "message", name, message: trimmedMessage }),
+  }).then(() => {
+    textEl.value = "";
+    const feed = document.getElementById("messageFeed");
+    const optimistic = document.createElement("div");
+    optimistic.className = "msg-item";
+    optimistic.innerHTML = `<div class="msg-head"><span class="msg-name">${escapeHtml(name)}</span>` +
+      `<span class="msg-time">Just now</span></div><div class="msg-text">${escapeHtml(trimmedMessage)}</div>`;
+    if (!feed.querySelector(".msg-item")) feed.innerHTML = "";
+    feed.insertBefore(optimistic, feed.firstChild);
+  }).catch(() => {
+    errEl.textContent = "Couldn't post right now -- try again in a bit.";
+    errEl.style.display = "";
+  }).finally(() => {
+    btn.disabled = false;
+  });
+}
+document.getElementById("msgPostBtn").addEventListener("click", postMessage);
+document.getElementById("msgText").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) postMessage();
+});
+
+/* ====================== tiebreaker resolver ====================== */
+// Mirrors the rule Chip Brunt spells out in his Day 1-4 results emails: a day's total is the
+// best N of an entrant's 15 picks (N=10 for Day1/Day2, N=5 for Day3/Day4/Overall). If two or
+// more entrants tie on that total, compare their (N+1)th-best pick, then (N+2)th, and so on --
+// lowest (best/most-under-par) score wins that level; anyone worse falls out of contention for
+// that spot. If it goes all the way through all 15 picks still tied, the spot(s) split.
+//
+// Scope, per Jeff:
+//  - Daily (Day 1-4): only the rank-1 tie matters (there's one daily winner), and it shouldn't
+//    populate until that round is actually final -- a mid-round "tie" is meaningless noise.
+//  - Overall: ties across the paid places (1..OVERALL_PAYOUT_SPOTS) matter, and this one's fine
+//    to run live since Overall is already a running total throughout the tournament.
+function ordinal(n) {
+  const s = ["th", "st", "nd", "rd"], v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
+function namesJoin(names) {
+  if (names.length <= 1) return names.join("");
+  if (names.length === 2) return names[0] + " and " + names[1];
+  return names.slice(0, -1).join(", ") + " and " + names[names.length - 1];
+}
+
+// A round is "complete" once every golfer who actually played it (i.e. not cut, not withdrawn)
+// has a posted score for it. Uses the same live ESPN map already loaded for scoring, so no extra
+// fetch needed. Rounds 3/4 naturally exclude cut golfers since they never post those rounds.
+function isRoundComplete(scoresMap, roundNum) {
+  let sawAny = false;
+  for (const g of scoresMap.values()) {
+    if (g.wd) continue;
+    if (g.cut && roundNum >= 3) continue;
+    sawAny = true;
+    if (g["r" + roundNum] == null) return false;
+  }
+  return sawAny;
+}
+
+// "Unofficial" banners on Overall + Day 1-4 -- each tab is a live, in-progress view until its
+// underlying round(s) are actually complete. Overall isn't official until Round 4 wraps up (since
+// standings can still shift through the whole tournament); each Day tab is only official once that
+// specific round has finished. Scorecards deliberately doesn't get one -- Jeff only wanted this on
+// the standings tabs.
+function renderUnofficialBanners(scoreData) {
+  const day1Complete = isRoundComplete(scoreData.map, 1);
+  const day2Complete = isRoundComplete(scoreData.map, 2);
+  const day3Complete = isRoundComplete(scoreData.map, 3);
+  const day4Complete = isRoundComplete(scoreData.map, 4);
+
+  const configs = [
+    { id: "unofficial-overall", complete: day4Complete,
+      text: "⚠ These are live, in-progress Overall standings -- unofficial until Round 4 is complete." },
+    { id: "unofficial-day1", complete: day1Complete,
+      text: "⚠ This is a live, in-progress Day 1 leaderboard -- unofficial until Round 1 is complete." },
+    { id: "unofficial-day2", complete: day2Complete,
+      text: "⚠ This is a live, in-progress Day 2 leaderboard -- unofficial until Round 2 is complete." },
+    { id: "unofficial-day3", complete: day3Complete,
+      text: "⚠ This is a live, in-progress Day 3 leaderboard -- unofficial until Round 3 is complete." },
+    { id: "unofficial-day4", complete: day4Complete,
+      text: "⚠ This is a live, in-progress Day 4 leaderboard -- unofficial until Round 4 is complete." },
+  ];
+  for (const cfg of configs) {
+    const el = document.getElementById(cfg.id);
+    if (!el) continue;
+    if (cfg.complete) {
+      el.style.display = "none";
+    } else {
+      el.textContent = cfg.text;
+      el.style.display = "block";
+    }
+  }
+}
+
+// Produces a full finishing order for a group of same-score entrants, using the tiebreak rule.
+// Returns an array of "clusters" in finishing order -- most clusters are a single entrant, but a
+// cluster has more than one entrant when they're genuinely tied even after all 15 picks (their
+// spots split). Each row also records which pick level separated it from the entrant ranked just
+// above it (null for the first row, since there's nothing above it to separate from).
+function orderTiedGroup(tiedEntrants, valuesKey, n) {
+  const withSorted = tiedEntrants.map(e => {
+    // Keep each golfer's name paired with their score while sorting, so a deciding level can be
+    // traced back to exactly which golfer (and what they shot) settled it -- not just a number.
+    const pairs = e.slots
+      .filter(s => typeof s[valuesKey] === "number")
+      .map(s => ({ v: s[valuesKey], name: s.name }))
+      .sort((a, b) => a.v - b.v);
+    return { entrant: e, sorted: pairs.map(p => p.v), sortedNames: pairs.map(p => p.name) };
+  });
+  function cmp(a, b) {
+    for (let lvl = n; lvl < 15; lvl++) {
+      const av = a.sorted[lvl], bv = b.sorted[lvl];
+      const aHas = typeof av === "number", bHas = typeof bv === "number";
+      if (!aHas && !bHas) continue;
+      if (!aHas) return 1;
+      if (!bHas) return -1;
+      if (av !== bv) return av - bv;
+    }
+    return 0;
+  }
+  withSorted.sort(cmp);
+  const rows = withSorted.map((w, i) => {
+    let decidingLevel = null, splitWithPrev = false;
+    if (i > 0) {
+      for (let lvl = n; lvl < 15; lvl++) {
+        const pv = withSorted[i - 1].sorted[lvl], cv = w.sorted[lvl];
+        if (pv !== cv) { decidingLevel = lvl + 1; break; }
+      }
+      if (decidingLevel === null) splitWithPrev = true;
+    }
+    return { entrant: w.entrant, sorted: w.sorted, sortedNames: w.sortedNames, decidingLevel, splitWithPrev };
+  });
+  const clusters = [];
+  for (const row of rows) {
+    if (row.splitWithPrev && clusters.length) clusters[clusters.length - 1].push(row);
+    else clusters.push([row]);
+  }
+  return clusters;
+}
+
+// Overall tiebreak, per the rules doc ("How does the Tiebreaker work for the overall?"):
+//  Step 1 -- compare the tied entrants' best-5 values directly against each other, position by
+//    position (lowest vs. lowest, 2nd-lowest vs. 2nd-lowest, ... 5th vs. 5th). This does NOT
+//    reach into picks 6-15 -- it's a direct compare of the same 5 values that make up the total.
+//  Step 2 -- only if all 5 positions match exactly, fall back to the FINAL ROUND's (Round 4)
+//    individual scores across all 15 picks, sorted and compared position by position. Only
+//    meaningful once Round 4 is actually complete -- if it's not, the tie is "pending" rather
+//    than resolved or split.
+//  Step 3 -- still tied after that -> split.
+function compareOverallEntrants(a, b, round4Complete) {
+  for (let i = 0; i < 5; i++) {
+    const av = a.top5[i], bv = b.top5[i];
+    const aHas = typeof av === "number", bHas = typeof bv === "number";
+    if (!aHas && !bHas) continue;
+    if (!aHas) return { cmp: 1, step: 1, level: i + 1 };
+    if (!bHas) return { cmp: -1, step: 1, level: i + 1 };
+    if (av !== bv) return { cmp: av - bv, step: 1, level: i + 1 };
+  }
+  if (!round4Complete) return { cmp: 0, step: null, level: null, pending: true };
+  for (let i = 0; i < 15; i++) {
+    const av = a.r4sorted[i], bv = b.r4sorted[i];
+    const aHas = typeof av === "number", bHas = typeof bv === "number";
+    if (!aHas && !bHas) continue;
+    if (!aHas) return { cmp: 1, step: 2, level: i + 1 };
+    if (!bHas) return { cmp: -1, step: 2, level: i + 1 };
+    if (av !== bv) return { cmp: av - bv, step: 2, level: i + 1 };
+  }
+  return { cmp: 0, step: null, level: null, pending: false };
+}
+
+function orderOverallTiedGroup(tiedEntrants, round4Complete) {
+  const withSorted = tiedEntrants.map(e => {
+    // Same idea as orderTiedGroup -- keep golfer names paired with their scores through the sort
+    // so a deciding level (Step 1's best-5, or Step 2's Round 4 fallback) can be traced back to
+    // exactly which golfer settled it, not just a number.
+    const ltPairs = e.slots.filter(s => typeof s.liveTotal === "number")
+      .map(s => ({ v: s.liveTotal, name: s.name })).sort((a, b) => a.v - b.v);
+    const r4Pairs = e.slots.filter(s => typeof s.r4 === "number")
+      .map(s => ({ v: s.r4, name: s.name })).sort((a, b) => a.v - b.v);
+    return {
+      entrant: e,
+      top5: ltPairs.slice(0, 5).map(p => p.v),
+      top5Names: ltPairs.slice(0, 5).map(p => p.name),
+      r4sorted: r4Pairs.map(p => p.v),
+      r4sortedNames: r4Pairs.map(p => p.name),
+    };
+  });
+  withSorted.sort((a, b) => compareOverallEntrants(a, b, round4Complete).cmp);
+  const rows = withSorted.map((w, i) => {
+    let decidingLevel = null, decidingStep = null, splitWithPrev = false, pending = false;
+    if (i > 0) {
+      const c = compareOverallEntrants(withSorted[i - 1], w, round4Complete);
+      if (c.cmp !== 0) { decidingLevel = c.level; decidingStep = c.step; }
+      else { splitWithPrev = true; pending = !!c.pending; }
+    }
+    return {
+      entrant: w.entrant, top5: w.top5, top5Names: w.top5Names, r4sorted: w.r4sorted, r4sortedNames: w.r4sortedNames,
+      decidingLevel, decidingStep, splitWithPrev, pending,
+    };
+  });
+  const clusters = [];
+  for (const row of rows) {
+    if (row.splitWithPrev && clusters.length) clusters[clusters.length - 1].push(row);
+    else clusters.push([row]);
+  }
+  return clusters;
+}
+
+// Finds every group of entrants tied on a given day/overall total, restricted to groups whose
+// rank falls at or before maxRank (e.g. only the rank-1 group for Daily; ranks 1..payout spots
+// for Overall). A group starting below maxRank is still included in full even if it runs past
+// maxRank, since resolving it is exactly what decides who makes it into the paid spots.
+function computeTiebreakGroups(computed, dayKey, n, valuesKey, maxRank, isOverall, round4Complete) {
+  const ranked = rankWithTies(computed, dayKey);
+  const groups = [];
+  let i = 0;
+  while (i < ranked.length) {
+    if (ranked[i].tied && ranked[i].rank <= maxRank) {
+      const score = ranked[i][dayKey];
+      const group = [];
+      let j = i;
+      while (j < ranked.length && ranked[j][dayKey] === score) { group.push(ranked[j]); j++; }
+      const clusters = isOverall ? orderOverallTiedGroup(group, round4Complete) : orderTiedGroup(group, valuesKey, n);
+      groups.push({ rank: ranked[i].rank, score, entrants: group, clusters });
+      i = j;
+    } else {
+      i++;
+    }
+  }
+  return groups;
+}
+
+// Returns the Set of original slot indices whose sorted rank (1-indexed) falls within
+// [startRank, endRank] -- e.g. indicesInRange(values, 6, 6) finds whichever slot holds an
+// entrant's 6th-best pick, regardless of where that pick sits in their Group A-E order.
+function indicesInRange(values, startRank, endRank) {
+  const withIdx = values.map((v, i) => ({ v, i })).filter(x => typeof x.v === "number" && !isNaN(x.v));
+  withIdx.sort((a, b) => a.v - b.v);
+  const set = new Set();
+  const end = Math.min(endRank, withIdx.length);
+  for (let r = startRank; r <= end; r++) set.add(withIdx[r - 1].i);
+  return set;
+}
+
+// The highest tiebreak level actually needed anywhere in this group -- e.g. if everyone sorted
+// out by the 6th pick except one pair that needed the 8th, this is 8. Used so every entrant's
+// mini scorecard highlights the same comparison range, making them easy to eyeball side by side.
+function groupMaxLevel(g, n) {
+  let maxLevel = n;
+  for (const cluster of g.clusters) {
+    for (const row of cluster) {
+      if (row.decidingLevel) maxLevel = Math.max(maxLevel, row.decidingLevel);
+      else if (row.splitWithPrev) maxLevel = Math.max(maxLevel, 15);
+    }
+  }
+  return maxLevel;
+}
+
+const TB_IDX_KEY = { r1: "day1Idx", r2: "day2Idx", r3: "day3Idx", r4: "day4Idx", liveTotal: "overallIdx" };
+
+// Given a row's own decidingLevel (its own rank position that separated it from the entrant
+// ranked just above it) and which values array it lives in, finds that specific slot index.
+function deciderIndexForRow(values, decidingLevel) {
+  if (!decidingLevel) return null;
+  const set = indicesInRange(values, decidingLevel, decidingLevel);
+  return set.size ? [...set][0] : null;
+}
+
+// Full scorecards (same Player/R1/R2/R3/R4/Total grid as the Scorecards tab) for just the tied
+// entrants, side by side. Gold = counted toward the base total (best N). Blue = the tiebreak
+// pick(s) actually in play.
+//  - Daily groups: blue spans the whole comparison range (picks N+1 through however deep the
+//    group needed to go), on the relevant round's column, same for every entrant in the group.
+//  - Overall groups: blue marks just the ONE cell that decided each entrant's spot relative to
+//    the entrant ranked just above them -- on the Total column if it was decided by Step 1 (a
+//    direct compare of the counted best-5 values), or on the R4 column if it fell back to Step 2
+//    (Round 4 individual scores across all 15 picks).
+function renderTiebreakScorecards(g, cfg) {
+  const isOverall = cfg.label === "Overall";
+  const maxLevel = isOverall ? null : groupMaxLevel(g, cfg.n);
+  const rowByEntrant = new Map();
+  if (isOverall) {
+    for (const cluster of g.clusters) for (const row of cluster) rowByEntrant.set(row.entrant, row);
+  }
+  let html = `<div class="scorecard-grid tb-scorecards">`;
+  for (const e of g.entrants) {
+    let deciderCol = null, deciderIdx = null;
+    if (isOverall) {
+      const row = rowByEntrant.get(e);
+      if (row && row.decidingLevel) {
+        if (row.decidingStep === 1) {
+          deciderCol = "liveTotal";
+          deciderIdx = deciderIndexForRow(e.slots.map(s => s.liveTotal), row.decidingLevel);
+        } else if (row.decidingStep === 2) {
+          deciderCol = "r4";
+          deciderIdx = deciderIndexForRow(e.slots.map(s => s.r4), row.decidingLevel);
+        }
+      }
+    } else {
+      var deciderSet = indicesInRange(e.slots.map(s => s[cfg.valuesKey]), cfg.n + 1, maxLevel);
+    }
+    let rows = "";
+    e.slots.forEach((s, idx) => {
+      const isCutOrWd = s.total === "CUT" || s.total === "WD";
+      const cls = { r1: "", r2: "", r3: "", r4: "", liveTotal: "" };
+      for (const k of ["r1", "r2", "r3", "r4", "liveTotal"]) {
+        const idxSet = e[TB_IDX_KEY[k]];
+        if (idxSet && idxSet.has(idx)) cls[k] += "counted";
+      }
+      if (isOverall) {
+        if (deciderCol && idx === deciderIdx) cls[deciderCol] = (cls[deciderCol] + " tb-decider").trim();
+      } else if (deciderSet.has(idx)) {
+        cls[cfg.valuesKey] = (cls[cfg.valuesKey] + " tb-decider").trim();
+      }
+      const totalDisplay = isCutOrWd ? s.total : fmtScore(s.liveTotal);
+      // Same CUT/WD treatment as the main Scorecards tab -- gray out R3/R4/Total once a golfer's
+      // out, instead of leaving them blank.
+      const r3Display = isCutOrWd ? s.total : fmtScore(s.r3);
+      const r4Display = isCutOrWd ? s.total : fmtScore(s.r4);
+      const r3Class = isCutOrWd ? "sc-cut-cell" : cls.r3;
+      const r4Class = isCutOrWd ? "sc-cut-cell" : cls.r4;
+      const totalClass = isCutOrWd ? "sc-cut-cell" : cls.liveTotal;
+      rows += `<tr><td>${s.name}${s.found ? "" : ' <span class="cut">(no live match)</span>'}</td>` +
+        `<td class="num ${cls.r1}">${fmtScore(s.r1)}</td><td class="num ${cls.r2}">${fmtScore(s.r2)}</td>` +
+        `<td class="num ${r3Class}">${r3Display}</td><td class="num ${r4Class}">${r4Display}</td>` +
+        `<td class="num ${totalClass}">${totalDisplay}</td></tr>`;
+    });
+    // Same totals row as the main Scorecards tab -- lets Jeff/Chip eyeball that the tiebreak math
+    // lines up with the best-10/best-5 totals without having to jump over to Scorecards to check.
+    const totalRow = e.locked ? "" : `<tr class="sc-total-row">` +
+      `<td>Total (best 10 / best 5)</td>` +
+      `<td class="num">${fmtScoreLive(e.day1, e.day1Partial)}</td>` +
+      `<td class="num">${fmtScoreLive(e.day2, e.day2Partial)}</td>` +
+      `<td class="num">${fmtScoreLive(e.day3, e.day3Partial)}</td>` +
+      `<td class="num">${fmtScoreLive(e.day4, e.day4Partial)}</td>` +
+      `<td class="num">${fmtScoreLive(e.overall, e.overallPartial)}</td></tr>`;
+    html += `<div class="sc-card">
+      <div class="sc-head"><div class="nm">${e.fullName}</div></div>
+      <table><thead><tr><th>Player</th><th class="num">R1</th><th class="num">R2</th><th class="num">R3</th><th class="num">R4</th><th class="num">Total</th></tr></thead>
+      <tbody>${rows}${totalRow}</tbody></table>
+    </div>`;
+  }
+  html += `</div>`;
+  const deciderLabel = isOverall
+    ? "Deciding pick (Total = Step 1 compare, R4 = Step 2 Round 4 fallback)"
+    : "Tiebreaker pick(s) in play";
+  html += `<div class="tb-legend"><span><i class="sw-counted"></i>Counted toward the base total (best ${cfg.n})</span>` +
+    `<span><i class="sw-decider"></i>${deciderLabel}</span></div>`;
+  return html;
+}
+
+function describeDecision(row, isOverall) {
+  if (!row.decidingLevel) {
+    if (row.pending) return "still tied on best 5 -- pending Round 4";
+    return "still tied through all 15";
+  }
+  if (isOverall && row.decidingStep === 1) {
+    const name = row.top5Names && row.top5Names[row.decidingLevel - 1];
+    return `${ordinal(row.decidingLevel)} best pick${name ? " (" + name + ")" : ""} -- shot (${fmtScore(row.top5[row.decidingLevel - 1])})`;
+  }
+  if (isOverall && row.decidingStep === 2) {
+    const name = row.r4sortedNames && row.r4sortedNames[row.decidingLevel - 1];
+    return `Round 4, ${ordinal(row.decidingLevel)} best score${name ? " (" + name + ")" : ""} -- shot (${fmtScore(row.r4sorted[row.decidingLevel - 1])})`;
+  }
+  const name = row.sortedNames && row.sortedNames[row.decidingLevel - 1];
+  return `${ordinal(row.decidingLevel)} pick${name ? " (" + name + ")" : ""} -- shot (${fmtScore(row.sorted[row.decidingLevel - 1])})`;
+}
+
+function renderTiebreakGroup(label, g, startRank, cfg) {
+  const isOverall = label === "Overall";
+  const totalCount = g.entrants.length;
+  // Overall standings aren't final until Round 4 wraps up -- even a spot Step 1 already cleanly
+  // decided can still shift as later rounds play out, so treat the WHOLE Overall group as pending
+  // whenever Round 4 isn't done, not just the clusters still mathematically tied.
+  const round4Pending = isOverall && !(cfg && cfg.round4Complete);
+  const isPendingOnly = isOverall && (round4Pending || (g.clusters.length === 1 && g.clusters[0].some(r => r.pending)));
+  const isSplitOnly = g.clusters.length === 1 && !isPendingOnly; // nobody separated at all -- everyone stays tied
+  let html = `<div class="tb-group ${isSplitOnly ? "tb-split" : ""} ${isPendingOnly ? "tb-pending" : ""}">`;
+  const headerTag = isPendingOnly ? " — pending" : "";
+  html += `<h3>${label} — ${totalCount}-way tie at rank ${startRank} (${fmtScore(g.score)})${headerTag}</h3>`;
+  html += `<div class="tb-scoreline">Tied: ${g.entrants.map(e => e.fullName).join(", ")}</div>`;
+  html += `<table><thead><tr><th>Finish</th><th>Entry</th><th>Decided by</th></tr></thead><tbody>`;
+  let rank = startRank;
+  let hiddenCount = 0;
+  for (const cluster of g.clusters) {
+    // Overall tiebreak tracking stops at OVERALL_TIEBREAK_DISPLAY_CAP (currently 6th) -- a tie
+    // that genuinely runs past that point still exists, but there's no need to show places we'll
+    // never pay out any time soon.
+    if (isOverall && rank > OVERALL_TIEBREAK_DISPLAY_CAP) { hiddenCount += cluster.length; continue; }
+    const clusterPending = isOverall && (round4Pending || cluster.some(r => r.pending));
+    const placeLabel = cluster.length > 1
+      ? `${ordinal(rank)}-${ordinal(rank + cluster.length - 1)} ${clusterPending ? "(pending)" : "(split)"}`
+      : (clusterPending ? `${ordinal(rank)} (pending)` : ordinal(rank));
+    for (let k = 0; k < cluster.length; k++) {
+      const row = cluster[k];
+      const decidedBy = k === 0 && rank === startRank ? "—" : describeDecision(row, isOverall);
+      html += `<tr><td class="${k === 0 ? "tb-winner-cell" : ""}">${k === 0 ? placeLabel : ""}</td>` +
+        `<td>${row.entrant.fullName}</td><td>${decidedBy}</td></tr>`;
+    }
+    rank += cluster.length;
+  }
+  html += `</tbody></table>`;
+  if (hiddenCount > 0) {
+    html += `<div class="tb-scoreline">+${hiddenCount} more tied further back, past ${ordinal(OVERALL_TIEBREAK_DISPLAY_CAP)} place -- not shown.</div>`;
+  }
+  html += renderTiebreakScorecards(g, cfg);
+  const draftId = "tbdraft-" + label.replace(/\W+/g, "") + "-" + startRank;
+  const draftText = buildTiebreakWriteup(label, g, startRank, cfg);
+  html += `<div class="tb-draft" id="${draftId}">${draftText}</div>`;
+  html += `<button type="button" class="tb-copybtn" data-target="${draftId}">Copy draft paragraph</button>`;
+  html += `</div>`;
+  return html;
+}
+
+// Builds a plain-English starter paragraph in the spirit of the season's results emails. For
+// Daily, this is just the single winner. For Overall, it walks place-by-place since multiple paid
+// spots can be tied together. Meant to be pasted into the results email and dressed up, not sent
+// verbatim.
+function buildTiebreakWriteup(label, g, startRank, cfg) {
+  const scoreStr = fmtScore(g.score);
+  const allNames = g.entrants.map(e => e.fullName);
+  if (label !== "Overall") {
+    const winnerCluster = g.clusters[0];
+    if (winnerCluster.length > 1) {
+      return `We had a ${allNames.length}-way tie for the ${label} Daily between ${namesJoin(allNames)}, all at (${scoreStr}), ` +
+        `that couldn't be broken even after comparing all 15 picks. Per the rules, today's payout splits evenly between ${namesJoin(allNames)}.`;
+    }
+    const winner = winnerCluster[0];
+    const runnerUpRow = g.clusters[1] ? g.clusters[1][0] : null;
+    let text = `We had a ${allNames.length}-way tie for the ${label} Daily between ${namesJoin(allNames)}, all at (${scoreStr}). `;
+    if (runnerUpRow) {
+      const golferName = winner.sortedNames && winner.sortedNames[runnerUpRow.decidingLevel - 1];
+      text += `${winner.entrant.fullName} wins the tiebreaker with their ${ordinal(runnerUpRow.decidingLevel)} best player's score` +
+        `${golferName ? " -- " + golferName + " shot" : " of"} (${fmtScore(winner.sorted[runnerUpRow.decidingLevel - 1])}). Congrats ${winner.entrant.fullName}!`;
+    } else {
+      text += `${winner.entrant.fullName} wins the tiebreaker. Congrats ${winner.entrant.fullName}!`;
+    }
+    // Walk the rest of the finish order too (rank-by-rank), naming the deciding golfer and score
+    // at each step, so multi-way ties get the same level of detail as a simple 2-way tie.
+    for (let i = 2; i < g.clusters.length; i++) {
+      const priorRow = g.clusters[i - 1][0];
+      const row = g.clusters[i][0];
+      if (!row.decidingLevel) continue; // split cluster -- nothing further to separate
+      const golferName = priorRow.sortedNames && priorRow.sortedNames[row.decidingLevel - 1];
+      text += ` ${priorRow.entrant.fullName} finishes ahead of ${row.entrant.fullName} on their ${ordinal(row.decidingLevel)} best player's score` +
+        `${golferName ? " -- " + golferName + " shot" : " of"} (${fmtScore(priorRow.sorted[row.decidingLevel - 1])}).`;
+    }
+    return text;
+  }
+  // Overall: place-by-place breakdown. While Round 4 isn't finished, EVERY placement here is
+  // provisional -- even one Step 1 has already cleanly decided -- since standings can still shift
+  // before the tournament wraps up, so every line gets a "(pending)" flag in that case.
+  const groupPending = !cfg || !cfg.round4Complete;
+  const pendingTag = groupPending ? " (pending -- not final until the tournament wraps up)" : "";
+  let text = `We have a ${allNames.length}-way tie for the Overall spot${allNames.length > 1 ? "s" : ""} starting at ${ordinal(startRank)} place, all at (${scoreStr}).${groupPending ? " Note: nothing below is final until Round 4 is complete." : ""}\n\n`;
+  let rank = startRank;
+  for (const cluster of g.clusters) {
+    if (cluster.length > 1) {
+      const first = cluster[0];
+      if (first.pending) {
+        text += `${ordinal(rank)}-${ordinal(rank + cluster.length - 1)}: ${namesJoin(cluster.map(r => r.entrant.fullName))} are tied on their best 5 -- ` +
+          `still pending, will be settled by Round 4 individual scores once the final round is complete.\n`;
+      } else {
+        text += `${ordinal(rank)}-${ordinal(rank + cluster.length - 1)}: ${namesJoin(cluster.map(r => r.entrant.fullName))} are tied even ` +
+          `after both tiebreaker steps -- these spots split evenly.\n`;
+      }
+    } else {
+      const row = cluster[0];
+      if (row.decidingLevel && row.decidingStep === 1) {
+        const golferName = row.top5Names && row.top5Names[row.decidingLevel - 1];
+        text += `${ordinal(rank)} Place goes to ${row.entrant.fullName}, deciding on their ${ordinal(row.decidingLevel)} best player's score` +
+          `${golferName ? " -- " + golferName + " shot" : " of"} (${fmtScore(row.top5[row.decidingLevel - 1])})${pendingTag}.\n`;
+      } else if (row.decidingLevel && row.decidingStep === 2) {
+        const golferName = row.r4sortedNames && row.r4sortedNames[row.decidingLevel - 1];
+        text += `${ordinal(rank)} Place goes to ${row.entrant.fullName} -- tied on the best 5, broken by Round 4's ${ordinal(row.decidingLevel)} best individual score` +
+          `${golferName ? " -- " + golferName + " shot" : " of"} (${fmtScore(row.r4sorted[row.decidingLevel - 1])})${pendingTag}.\n`;
+      } else {
+        text += `${ordinal(rank)} Place goes to ${row.entrant.fullName}${pendingTag}.\n`;
+      }
+    }
+    rank += cluster.length;
+  }
+  return text;
+}
+
+function renderTiebreakers(computed, scoreData) {
+  // --- Daily: rank-1 only, gated on the round being final. Each day gets its own sub-tab/panel
+  // now, so unlike before there's always SOMETHING to show there -- either the resolved tie, a
+  // "no tie" note, or (before the round wraps) a placeholder explaining it's not available yet.
+  const DAILY_CONFIG = [
+    { key: "day1", label: "Day 1", n: 10, valuesKey: "r1", roundNum: 1 },
+    { key: "day2", label: "Day 2", n: 10, valuesKey: "r2", roundNum: 2 },
+    { key: "day3", label: "Day 3", n: 5, valuesKey: "r3", roundNum: 3 },
+    { key: "day4", label: "Day 4", n: 5, valuesKey: "r4", roundNum: 4 },
+  ];
+  for (const cfg of DAILY_CONFIG) {
+    const dayBox = document.getElementById("tiebreakerReport-" + cfg.key);
+    const roundComplete = isRoundComplete(scoreData.map, cfg.roundNum);
+    let dayHtml;
+    if (!roundComplete) {
+      dayHtml = `<div class="tb-provisional">⚠ ${cfg.label} isn't final yet -- the Daily winner tiebreaker (if there is one) ` +
+        `will show here as soon as Round ${cfg.roundNum} is complete.</div>`;
+    } else {
+      const groups = computeTiebreakGroups(computed, cfg.key, cfg.n, cfg.valuesKey, 1, false, false);
+      if (!groups.length) {
+        dayHtml = `<div class="tb-none">Round ${cfg.roundNum} is final -- no tie for the ${cfg.label} win.</div>`;
+      } else {
+        dayHtml = groups.map(g => renderTiebreakGroup(cfg.label, g, g.rank, cfg)).join("");
+      }
+    }
+    dayBox.innerHTML = dayHtml;
+    wireTbCopyButtons(dayBox);
+  }
+
+  // --- Overall: ranks 1..OVERALL_TIEBREAK_DISPLAY_CAP, live. Step 2 of the tiebreak (Round 4
+  // individual scores) only kicks in once Round 4 is actually complete -- before that, a tie left
+  // unresolved by Step 1 shows as "pending" rather than a false split. Tracked through 6th place
+  // even though only the top OVERALL_PAYOUT_SPOTS currently pay, so the report doesn't need
+  // rebuilding the day the pool grows -- but never shows 7th place or beyond.
+  const overallBox = document.getElementById("tiebreakerReport-overall");
+  const round4Complete = isRoundComplete(scoreData.map, 4);
+  const overallCfg = { label: "Overall", n: 5, valuesKey: "liveTotal", round4Complete };
+  const overallGroups = computeTiebreakGroups(computed, "overall", overallCfg.n, overallCfg.valuesKey, OVERALL_TIEBREAK_DISPLAY_CAP, true, round4Complete);
+  let overallHtml = "";
+  for (const g of overallGroups) {
+    overallHtml += renderTiebreakGroup("Overall", g, g.rank, overallCfg);
+  }
+  if (!overallGroups.length) {
+    overallHtml = `<div class="tb-none">No ties right now for Overall places 1-${OVERALL_TIEBREAK_DISPLAY_CAP}. This updates live as scores come in.</div>`;
+  } else if (!round4Complete) {
+    overallHtml = `<div class="tb-provisional">⚠ Overall standings are still in progress -- these tiebreak positions are provisional and can ` +
+      `change as later rounds are completed. Final results won't be locked in until the tournament wraps up ` +
+      `(typically Sunday evening / Monday morning).</div>` + overallHtml;
+  }
+  overallBox.innerHTML = overallHtml;
+  wireTbCopyButtons(overallBox);
+}
+
+// Pick popularity + per-round scores, grouped by Group A-E. Group boundaries are derived from
+// GROUP_PICKS (same 5-4-3-2-1 slot order every entrant's picks are already stored in) rather than
+// a separate roster list, since this page has never needed to know the full field -- only who
+// actually got picked. Golfers who withdrew and got substituted by an alternate show under
+// whichever slot they're CURRENTLY resolved to (same as everywhere else on this page), not
+// double-counted under both names.
+function renderStats(computed) {
+  const container = document.getElementById("statsGrid");
+  const groupNames = Object.keys(GROUP_PICKS);
+  const ranges = [];
+  let start = 0;
+  for (const g of groupNames) {
+    const n = GROUP_PICKS[g];
+    ranges.push({ group: g, start, end: start + n });
+    start += n;
+  }
+  let html = "";
+  for (const r of ranges) {
+    const tally = new Map(); // normalized name -> { name, count, r1, r2, r3, r4, found }
+    for (const e of computed) {
+      for (let idx = r.start; idx < r.end; idx++) {
+        const s = e.slots[idx];
+        if (!s || !s.name || s.name === "(no pick)") continue;
+        const key = normalizeName(s.name);
+        if (!tally.has(key)) {
+          tally.set(key, { name: s.name, count: 0, r1: s.r1, r2: s.r2, r3: s.r3, r4: s.r4, found: s.found });
+        }
+        tally.get(key).count++;
+      }
+    }
+    const rows = [...tally.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+    const body = rows.length
+      ? rows.map(p => `<tr><td>${p.name}${p.found ? "" : ' <span class="cut">(no live match)</span>'}</td>` +
+          `<td class="num">${p.count}</td><td class="num">${fmtScore(p.r1)}</td><td class="num">${fmtScore(p.r2)}</td>` +
+          `<td class="num">${fmtScore(p.r3)}</td><td class="num">${fmtScore(p.r4)}</td></tr>`).join("")
+      : `<tr><td colspan="6" class="tb-none">No picks yet in ${r.group}.</td></tr>`;
+    html += `<div class="card stats-card"><h3>${r.group}</h3>` +
+      `<table><thead><tr><th>Player</th><th class="num">Times Picked</th><th class="num">R1</th><th class="num">R2</th><th class="num">R3</th><th class="num">R4</th></tr></thead>` +
+      `<tbody>${body}</tbody></table></div>`;
+  }
+  container.innerHTML = html;
+}
+
+function wireTbCopyButtons(container) {
+  container.querySelectorAll(".tb-copybtn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const text = document.getElementById(btn.dataset.target).textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        btn.textContent = "Copied!";
+        btn.classList.add("copied");
+        setTimeout(() => { btn.textContent = "Copy draft paragraph"; btn.classList.remove("copied"); }, 1500);
+      }).catch(() => { /* clipboard permissions can be flaky in some browsers -- fail silently */ });
+    });
+  });
+}
+
+/* ====================== main refresh cycle ====================== */
+let refreshing = false;
+async function refreshAll() {
+  if (refreshing) return;
+  refreshing = true;
+  const statusEl = document.getElementById("lastUpdated");
+  statusEl.innerHTML = '<span class="spin"></span>Updating…';
+  try {
+    const [submissions, scoreData] = await Promise.all([fetchPicks(), fetchScores()]);
+    clearError();
+    const entrantsRaw = selectEntrants(submissions, scoreData.lockTime);
+    const computed = entrantsRaw.map(e => computeEntrant(e, scoreData.map));
+    attachRanks(computed);
+
+    const dnqEntrants = computed.filter(e => e.dnq);
+    renderDayTable("tbl-overall", rankWithTies(computed, "overall"), "overall", "Overall", dnqEntrants);
+    renderDayTable("tbl-day1", rankWithTies(computed, "day1"), "day1", "Day 1");
+    renderDayTable("tbl-day2", rankWithTies(computed, "day2"), "day2", "Day 2");
+    renderDayTable("tbl-day3", rankWithTies(computed, "day3"), "day3", "Day 3", dnqEntrants);
+    renderDayTable("tbl-day4", rankWithTies(computed, "day4"), "day4", "Day 4", dnqEntrants);
+    renderUnofficialBanners(scoreData);
+    renderScorecards(computed.slice().sort((a, b) =>
+      (a.lastName || a.fullName).localeCompare(b.lastName || b.fullName) || a.fullName.localeCompare(b.fullName)
+    ));
+    renderTiebreakers(computed, scoreData);
+    renderStats(computed);
+    renderMessageNameOptions(computed);
+    // Message board is intentionally isolated from the rest of this try block -- a hiccup loading
+    // the Messages feed (e.g. MESSAGES_TSV_URL not filled in yet) should never take down the live
+    // scores/standings above it.
+    fetchMessages().then(renderMessageFeed).catch(() => {
+      const feed = document.getElementById("messageFeed");
+      if (feed) feed.innerHTML = '<div class="note">Couldn\'t load messages right now.</div>';
+    });
+
+    document.getElementById("eventSub").textContent = scoreData.eventName + (scoreData.status ? " — " + scoreData.status : "");
+    statusEl.textContent = "Last updated " + new Date().toLocaleTimeString();
+    const lockedCount = entrantsRaw.filter(e => e.locked).length;
+    const countNote = lockedCount > 0
+      ? (entrantsRaw.length - lockedCount) + " entries loaded (" + lockedCount + " late submission" + (lockedCount === 1 ? "" : "s") + " excluded)."
+      : entrantsRaw.length + " entries loaded.";
+    const lockNote = scoreData.lockTime
+      ? " Picks locked as of " + scoreData.lockTime.display + " (first tee time)."
+      : "";
+    document.getElementById("footNote").textContent =
+      countNote + " Scores pulled live from ESPN; refreshes automatically every " +
+      Math.round(REFRESH_MS / 1000) + "s, or hit Refresh now." + lockNote;
+  } catch (err) {
+    showError("Couldn't fully refresh: " + err.message + "\n\nThis page fetches live from Google Sheets and ESPN " +
+      "directly in your browser -- if either source is briefly unavailable, or blocks cross-site requests, this " +
+      "message shows instead of silently failing. Try Refresh now in a moment.");
+    statusEl.textContent = "Last attempt failed — " + new Date().toLocaleTimeString();
+  } finally {
+    refreshing = false;
+  }
+}
+
+document.getElementById("refreshBtn").addEventListener("click", refreshAll);
+document.getElementById("pageTitle").textContent = TOURNAMENT_NAME.split(" — ")[0] + " — Live Leaderboard";
+document.getElementById("tb-payout-spots-note").textContent = OVERALL_PAYOUT_SPOTS;
+refreshAll();
+setInterval(refreshAll, REFRESH_MS);
+</script>
+</body>
+</html>
