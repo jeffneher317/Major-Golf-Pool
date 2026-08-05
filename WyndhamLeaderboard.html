@@ -911,6 +911,7 @@ function renderPayouts() {
     const overall = rows.filter(p => p.category.startsWith("Overall"));
     const other = rows.filter(p => !p.category.startsWith("Day") && !p.category.startsWith("Overall"));
     html += `<h3 style="margin:0 0 8px; color:var(--green-dark);">${tournament}</h3>`;
+    html += `<div class="tb-provisional" style="margin:0 0 12px;">⚠️ Prizes are not live. Right now the only confirmed prize is a free beer for the Overall 1st place winner.</div>`;
     html += `<div class="payouts-row">`;
     if (daily.length) html += payoutsTable("Daily", daily);
     if (overall.length) html += payoutsTable("Overall", overall);
