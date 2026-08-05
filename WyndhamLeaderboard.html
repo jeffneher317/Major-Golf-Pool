@@ -284,7 +284,10 @@
     <div class="card msg-post-card" style="text-align:center;">
       <h3>📊 Quick Polls</h3>
       <div class="note" style="margin:0 0 12px;">Just for fun -- click through, answer, done.</div>
-      <a href="https://docs.google.com/forms/d/1gxHSaVsVF_qkrESPgYXnnX_b_LOHeYLQqBNpoS93BL4/viewform" target="_blank" rel="noopener" style="display:block; margin-bottom:10px; padding:10px; border-radius:8px; background:var(--green-dark); color:#fff; text-decoration:none; font-weight:600;">Poll #1: Will Chip finally win and win the free beer(s)?</a>
+      <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:10px; text-align:left;">
+        <a href="https://docs.google.com/forms/d/1gxHSaVsVF_qkrESPgYXnnX_b_LOHeYLQqBNpoS93BL4/viewform" target="_blank" rel="noopener" style="flex:1 1 200px; padding:10px; border-radius:8px; background:var(--green-dark); color:#fff; text-decoration:none; font-weight:600; text-align:center;">Poll #1: Will Chip finally win and win the free beer(s)?</a>
+        <div id="poll1Results" style="flex:1 1 150px;"></div>
+      </div>
       <a href="https://docs.google.com/forms/d/11ltoanEbNkZSWEB8vJF8nOJ1R-3XYMlmG03Tjw8f6AA/viewform" target="_blank" rel="noopener" style="display:block; padding:10px; border-radius:8px; background:var(--green-dark); color:#fff; text-decoration:none; font-weight:600;">Poll #2: What did you use to enter your picks?</a>
     </div>
     <div id="messageFeed"></div>
@@ -353,6 +356,11 @@ const SUBMIT_SECRET = "Majors2026"; // must match SHARED_SECRET in the Apps Scri
 // until after that first post.
 const MESSAGES_TSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vScRxv9AHrLvuftk8SFvhqdsQaENzrTydEgKbG7ow_ii56TNm7uKcJoO9maExpeERnsBCY5xzzvibdS/pub?gid=431618619&single=true&output=tsv";
 const MAX_MESSAGE_LENGTH = 500;
+// Poll #1 ("Will Chip finally win?") -- Google Form's own linked response Sheet, published to the
+// web the same way as MESSAGES_TSV_URL/PICKS_TSV_URL above. Column 0 is the Form's Timestamp,
+// column 1 is the answer text ("Yes"/"No"). Leave blank to hide the results display and just show
+// the poll link on its own.
+const POLL1_TSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS1GsT1Xue59KAU1oC3RSNvBLU7FKGUveL5fWgTJ9Eq5mv2PrTSoX8Vs0BijDmnaVqVab2xBf60z_SH/pub?gid=596380112&single=true&output=tsv";
 /* =================================================================================== */
 
 /* ---- Picks TSV column layout (0-indexed), matches the Google Sheet / Apps Script schema ---- */
@@ -966,6 +974,43 @@ async function fetchMessages() {
     name: (r[1] || "").trim(),
     message: (r[2] || "").trim(),
   })).filter(m => m.message);
+}
+
+// Poll #1 results -- Google Form's linked response Sheet, column 1 is the Yes/No answer.
+async function fetchPoll1Results() {
+  if (!POLL1_TSV_URL) return null;
+  const res = await fetch(POLL1_TSV_URL, { cache: "no-store" });
+  if (!res.ok) throw new Error("Could not load poll results (HTTP " + res.status + ")");
+  const text = await res.text();
+  const rows = parseTSV(text);
+  let yes = 0, no = 0;
+  for (const r of rows) {
+    const ans = (r[1] || "").trim().toLowerCase();
+    if (ans === "yes") yes++;
+    else if (ans === "no") no++;
+  }
+  return { yes, no };
+}
+
+function renderPoll1Results(counts) {
+  const el = document.getElementById("poll1Results");
+  if (!el) return;
+  if (!counts) { el.innerHTML = ""; return; }
+  const total = counts.yes + counts.no;
+  if (total === 0) {
+    el.innerHTML = '<div class="note" style="margin:0;">No responses yet.</div>';
+    return;
+  }
+  const yesPct = Math.round((counts.yes / total) * 100);
+  const noPct = 100 - yesPct;
+  el.innerHTML =
+    `<div style="font-size:.82rem; margin-bottom:2px;"><b>Yes</b> ${counts.yes} (${yesPct}%)</div>` +
+    `<div style="background:var(--lightgreen); border-radius:4px; height:6px; margin-bottom:6px; overflow:hidden;">` +
+      `<div style="background:var(--green); height:100%; width:${yesPct}%;"></div></div>` +
+    `<div style="font-size:.82rem; margin-bottom:2px;"><b>No</b> ${counts.no} (${noPct}%)</div>` +
+    `<div style="background:var(--lightred); border-radius:4px; height:6px; overflow:hidden;">` +
+      `<div style="background:var(--red); height:100%; width:${noPct}%;"></div></div>` +
+    `<div style="font-size:.72rem; color:#889; margin-top:4px;">${total} response${total === 1 ? "" : "s"}</div>`;
 }
 
 // Keeps the name dropdown in sync with whoever's actually submitted picks -- this is what makes
@@ -1664,6 +1709,12 @@ async function refreshAll() {
     fetchMessages().then(renderMessageFeed).catch(() => {
       const feed = document.getElementById("messageFeed");
       if (feed) feed.innerHTML = '<div class="note">Couldn\'t load messages right now.</div>';
+    });
+    // Poll #1 results -- same isolation pattern as the message board fetch above, so a hiccup
+    // loading the poll's response Sheet never takes down the live scores/standings.
+    fetchPoll1Results().then(renderPoll1Results).catch(() => {
+      const el = document.getElementById("poll1Results");
+      if (el) el.innerHTML = '';
     });
 
     document.getElementById("eventSub").textContent = scoreData.eventName + (scoreData.status ? " — " + scoreData.status : "");
