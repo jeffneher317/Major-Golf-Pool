@@ -195,6 +195,18 @@
   .tb-legend i{width:12px; height:12px; border-radius:3px; display:inline-block;}
   .tb-legend .sw-counted{background:var(--lightgold);}
   .tb-legend .sw-decider{background:#dbe9fb; box-shadow:inset 0 0 0 1px #6f9ce0;}
+.entry-link{color:inherit; text-decoration:underline; cursor:pointer;}
+.entry-link:hover{color:var(--green-dark);}
+.sc-highlight{animation:scHighlightPulse 2s ease;}
+@keyframes scHighlightPulse{0%{box-shadow:0 0 0 4px var(--gold);} 100%{box-shadow:0 0 0 0 rgba(201,162,39,0);}}
+.golfer-link{text-decoration:underline dotted; cursor:pointer;}
+.golfer-link:hover{color:var(--green-dark);}
+.golfer-popup{position:fixed; z-index:9999; background:#fff; border:1px solid var(--border); border-radius:8px; box-shadow:0 4px 14px rgba(0,0,0,.15); padding:10px 14px; max-width:240px; display:none; font-size:.8rem;}
+.golfer-popup.show{display:block;}
+.golfer-popup .gp-title{font-weight:700; margin-bottom:4px; color:var(--green-dark);}
+.golfer-popup .gp-sub{font-size:.72rem; color:#667; margin-bottom:2px;}
+.golfer-popup ul{margin:0; padding-left:18px;}
+.golfer-popup .gp-empty{color:#889; font-style:italic;}
 </style>
 <script data-goatcounter="https://mgc-leaderboard.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
 </head>
@@ -261,6 +273,7 @@
       the same picks and scores everything else on this page uses. Only golfers someone actually picked show up
       here (not the full field).</div>
     <div id="statsGrid"></div>
+<div id="golferPopup" class="golfer-popup"></div>
   </div>
   <div class="panel" id="panel-payouts">
     <div class="payouts-gate-card card" id="payoutsGate">
@@ -795,7 +808,7 @@ function renderDayTable(tblId, ranked, dayKey, label, dnqEntrants) {
   let html = `<thead><tr><th>Pos</th><th>Entry</th><th class="num">${label}</th></tr></thead><tbody>`;
   for (const e of ranked) {
     html += `<tr><td class="rankcell ${e.tied ? 'standing-tie' : ''}">${fmtStanding(e)}</td>` +
-      `<td>${e.fullName}</td><td class="num">${fmtScoreLive(e[dayKey], e[partialKey])}</td></tr>`;
+      `<td><a href="javascript:void(0)" class="entry-link" data-goto-name="${e.fullName.replace(/"/g, "&quot;")}">${e.fullName}</a></td><td class="num">${fmtScoreLive(e[dayKey], e[partialKey])}</td></tr>`;
   }
   // DNQ entries (5 or fewer picks still posting scores) list at the bottom, alphabetically --
   // their raw score still shows for reference but they're not ranked and don't count for payouts.
@@ -805,7 +818,7 @@ function renderDayTable(tblId, ranked, dayKey, label, dnqEntrants) {
     );
     for (const e of sortedDnq) {
       html += `<tr class="dnq-row"><td class="rankcell cut">DNQ</td>` +
-        `<td>${e.fullName}</td><td class="num cut">${fmtScoreLive(e[dayKey], e[partialKey])}</td></tr>`;
+        `<td><a href="javascript:void(0)" class="entry-link" data-goto-name="${e.fullName.replace(/"/g, "&quot;")}">${e.fullName}</a></td><td class="num cut">${fmtScoreLive(e[dayKey], e[partialKey])}</td></tr>`;
     }
   }
   html += "</tbody>";
@@ -937,6 +950,39 @@ document.getElementById("tabs").addEventListener("click", (e) => {
   document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
   tab.classList.add("active");
   document.getElementById("panel-" + tab.dataset.panel).classList.add("active");
+});
+
+/* Clicking an entry's name on Overall/Day1-4 jumps straight to their card on Scorecards. */
+function switchToTab(panelName) {
+const tabBtn = document.querySelector('.tab[data-panel="' + panelName + '"]');
+if (!tabBtn) return;
+document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+tabBtn.classList.add("active");
+document.getElementById("panel-" + panelName).classList.add("active");
+}
+function goToScorecard(name) {
+switchToTab("scorecards");
+const search = document.getElementById("scSearch");
+if (search) {
+search.value = "";
+search.dispatchEvent(new Event("input"));
+}
+requestAnimationFrame(() => {
+const key = normalizeName(name);
+const card = document.querySelector('.sc-card[data-search-key="' + key + '"]');
+if (card) {
+card.scrollIntoView({ behavior: "smooth", block: "start" });
+card.classList.add("sc-highlight");
+setTimeout(() => card.classList.remove("sc-highlight"), 2000);
+}
+});
+}
+document.addEventListener("click", (e) => {
+const link = e.target.closest(".entry-link");
+if (!link) return;
+e.preventDefault();
+goToScorecard(link.dataset.gotoName);
 });
 
 /* Tiebreakers sub-tabs (Day 1-4 + Overall). Separate element/class from the top nav on purpose --
@@ -1693,30 +1739,65 @@ function renderStats(computed, picksRevealed) {
   }
   let html = "";
   for (const r of ranges) {
-    const tally = new Map(); // normalized name -> { name, count, r1, r2, r3, r4, found }
-    for (const e of computed) {
-      for (let idx = r.start; idx < r.end; idx++) {
-        const s = e.slots[idx];
-        if (!s || !s.name || s.name === "(no pick)") continue;
-        const key = normalizeName(s.name);
-        if (!tally.has(key)) {
-          tally.set(key, { name: s.name, count: 0, r1: s.r1, r2: s.r2, r3: s.r3, r4: s.r4, found: s.found });
-        }
-        tally.get(key).count++;
-      }
-    }
-    const rows = [...tally.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
-    const body = rows.length
-      ? rows.map(p => `<tr><td>${p.name}${p.found ? "" : ' <span class="cut">(no live match)</span>'}</td>` +
-          `<td class="num">${p.count}</td><td class="num">${fmtScore(p.r1)}</td><td class="num">${fmtScore(p.r2)}</td>` +
-          `<td class="num">${fmtScore(p.r3)}</td><td class="num">${fmtScore(p.r4)}</td></tr>`).join("")
-      : `<tr><td colspan="6" class="tb-none">No picks yet in ${r.group}.</td></tr>`;
+    const tally = new Map(); // normalized name -> { name, count, r1, r2, r3, r4, found, pickers }
+for (const e of computed) {
+for (let idx = r.start; idx < r.end; idx++) {
+const s = e.slots[idx];
+if (!s || !s.name || s.name === "(no pick)") continue;
+const key = normalizeName(s.name);
+if (!tally.has(key)) {
+tally.set(key, { name: s.name, count: 0, r1: s.r1, r2: s.r2, r3: s.r3, r4: s.r4, found: s.found, pickers: [] });
+}
+tally.get(key).count++;
+tally.get(key).pickers.push(e.fullName);
+}
+}
+const rows = [...tally.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+const body = rows.length
+? rows.map(p => {
+const pickersJson = JSON.stringify(p.pickers).replace(/"/g, "&quot;");
+return `<tr><td><span class="golfer-link" data-pickers="${pickersJson}">${p.name}</span>${p.found ? "" : ' <span class="cut">(no live match)</span>'}</td>` +
+`<td class="num">${p.count}</td><td class="num">${fmtScore(p.r1)}</td><td class="num">${fmtScore(p.r2)}</td>` +
+`<td class="num">${fmtScore(p.r3)}</td><td class="num">${fmtScore(p.r4)}</td></tr>`;
+}).join("")
+: `<tr><td colspan="6" class="tb-none">No picks yet in ${r.group}.</td></tr>`;
     html += `<div class="card stats-card"><h3>${r.group}</h3>` +
       `<table><thead><tr><th>Player</th><th class="num">Times Picked</th><th class="num">R1</th><th class="num">R2</th><th class="num">R3</th><th class="num">R4</th></tr></thead>` +
       `<tbody>${body}</tbody></table></div>`;
   }
   container.innerHTML = html;
+document.querySelectorAll(".golfer-link").forEach(link => {
+link.addEventListener("mouseenter", () => showGolferPopup(link));
+link.addEventListener("mouseleave", hideGolferPopup);
+link.addEventListener("click", (e) => {
+e.stopPropagation();
+showGolferPopup(link);
+});
+});
 }
+
+function showGolferPopup(link) {
+const popup = document.getElementById("golferPopup");
+if (!popup) return;
+let pickers = [];
+try { pickers = JSON.parse(link.getAttribute("data-pickers") || "[]"); } catch (e) { /* ignore */ }
+popup.innerHTML = "<div class='gp-title'>" + link.textContent.trim() + "</div>" +
+(pickers.length
+? "<div class='gp-sub'>Picked by:</div><ul>" + pickers.map(n => "<li>" + n + "</li>").join("") + "</ul>"
+: "<div class='gp-empty'>No one currently has this golfer.</div>");
+const rect = link.getBoundingClientRect();
+const left = Math.min(rect.left, window.innerWidth - 260);
+popup.style.left = Math.max(8, left) + "px";
+popup.style.top = (rect.bottom + 6) + "px";
+popup.classList.add("show");
+}
+function hideGolferPopup() {
+const popup = document.getElementById("golferPopup");
+if (popup) popup.classList.remove("show");
+}
+document.addEventListener("click", (e) => {
+if (!e.target.closest(".golfer-link") && !e.target.closest("#golferPopup")) hideGolferPopup();
+});
 
 function wireTbCopyButtons(container) {
   container.querySelectorAll(".tb-copybtn").forEach(btn => {
