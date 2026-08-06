@@ -182,6 +182,13 @@
     background:var(--lightgold); border:1px solid var(--gold); border-radius:8px;
     padding:10px 14px; font-size:.82rem; color:#5a4a10; margin-bottom:16px; line-height:1.5;
   }
+  .day-winner-banner{
+    background:var(--lightgreen); border:2px solid var(--green); border-radius:8px;
+    padding:14px 18px; text-align:center; font-size:1.05rem; font-weight:700;
+    color:var(--green-dark); margin-bottom:16px; line-height:1.5;
+  }
+  .day-winner-banner + .day-winner-banner{margin-top:-8px;}
+  tr.payout-winner-row td{background:var(--lightgreen); font-weight:700;}
   .tb-scorecards{margin:12px 0 6px;}
   .sc-card td.tb-decider{
     font-weight:700; border-radius:4px; box-shadow:inset 0 0 0 2px #3b6fd4;
@@ -241,11 +248,11 @@
     <div class="tab" data-panel="messages">Message Board</div>
   </div>
 
-  <div class="panel active" id="panel-overall"><div class="tb-provisional" id="unofficial-overall" style="display:none;"></div><div class="card"><div class="note">Click on your name -- or anyone else's -- to jump straight to that scorecard.</div><div class="note">An entry needs more than 5 of their 15 picks still posting real scores (not cut or withdrawn) to stay eligible here -- entries that don't qualify are shown as DNQ below.</div><table id="tbl-overall"></table><div class="note" id="tbl-overall-note" style="display:none;">* = live running total (best 5 of however many of that entry's picks have posted so far) -- not final until 5+ have scores.</div></div></div>
-  <div class="panel" id="panel-day1"><div class="tb-provisional" id="unofficial-day1" style="display:none;"></div><div class="card"><div class="note">Click on your name -- or anyone else's -- to jump straight to that scorecard.</div><table id="tbl-day1"></table><div class="note" id="tbl-day1-note" style="display:none;">* = live running total (best 10 of however many have posted so far) -- not final until 10+ have scores.</div></div></div>
-  <div class="panel" id="panel-day2"><div class="tb-provisional" id="unofficial-day2" style="display:none;"></div><div class="card"><div class="note">Click on your name -- or anyone else's -- to jump straight to that scorecard.</div><table id="tbl-day2"></table><div class="note" id="tbl-day2-note" style="display:none;">* = live running total (best 10 of however many have posted so far) -- not final until 10+ have scores.</div></div></div>
-  <div class="panel" id="panel-day3"><div class="tb-provisional" id="unofficial-day3" style="display:none;"></div><div class="card"><div class="note">Click on your name -- or anyone else's -- to jump straight to that scorecard.</div><div class="note">An entry needs more than 5 of their 15 picks still posting real scores (not cut or withdrawn) to stay eligible here -- entries that don't qualify are shown as DNQ below.</div><table id="tbl-day3"></table><div class="note" id="tbl-day3-note" style="display:none;">* = live running total (best 5 of however many have posted so far) -- not final until 5+ have scores.</div></div></div>
-  <div class="panel" id="panel-day4"><div class="tb-provisional" id="unofficial-day4" style="display:none;"></div><div class="card"><div class="note">Click on your name -- or anyone else's -- to jump straight to that scorecard.</div><div class="note">An entry needs more than 5 of their 15 picks still posting real scores (not cut or withdrawn) to stay eligible here -- entries that don't qualify are shown as DNQ below.</div><table id="tbl-day4"></table><div class="note" id="tbl-day4-note" style="display:none;">* = live running total (best 5 of however many have posted so far) -- not final until 5+ have scores.</div></div></div>
+  <div class="panel active" id="panel-overall"><div class="tb-provisional" id="unofficial-overall" style="display:none;"></div><div id="dayWinnerBanners-overall"></div><div class="card"><div class="note">Click on your name -- or anyone else's -- to jump straight to that scorecard.</div><div class="note">An entry needs more than 5 of their 15 picks still posting real scores (not cut or withdrawn) to stay eligible here -- entries that don't qualify are shown as DNQ below.</div><table id="tbl-overall"></table><div class="note" id="tbl-overall-note" style="display:none;">* = live running total (best 5 of however many of that entry's picks have posted so far) -- not final until 5+ have scores.</div></div></div>
+  <div class="panel" id="panel-day1"><div class="tb-provisional" id="unofficial-day1" style="display:none;"></div><div id="dayWinnerBanner-day1"></div><div class="card"><div class="note">Click on your name -- or anyone else's -- to jump straight to that scorecard.</div><table id="tbl-day1"></table><div class="note" id="tbl-day1-note" style="display:none;">* = live running total (best 10 of however many have posted so far) -- not final until 10+ have scores.</div></div></div>
+  <div class="panel" id="panel-day2"><div class="tb-provisional" id="unofficial-day2" style="display:none;"></div><div id="dayWinnerBanner-day2"></div><div class="card"><div class="note">Click on your name -- or anyone else's -- to jump straight to that scorecard.</div><table id="tbl-day2"></table><div class="note" id="tbl-day2-note" style="display:none;">* = live running total (best 10 of however many have posted so far) -- not final until 10+ have scores.</div></div></div>
+  <div class="panel" id="panel-day3"><div class="tb-provisional" id="unofficial-day3" style="display:none;"></div><div id="dayWinnerBanner-day3"></div><div class="card"><div class="note">Click on your name -- or anyone else's -- to jump straight to that scorecard.</div><div class="note">An entry needs more than 5 of their 15 picks still posting real scores (not cut or withdrawn) to stay eligible here -- entries that don't qualify are shown as DNQ below.</div><table id="tbl-day3"></table><div class="note" id="tbl-day3-note" style="display:none;">* = live running total (best 5 of however many have posted so far) -- not final until 5+ have scores.</div></div></div>
+  <div class="panel" id="panel-day4"><div class="tb-provisional" id="unofficial-day4" style="display:none;"></div><div id="dayWinnerBanner-day4"></div><div class="card"><div class="note">Click on your name -- or anyone else's -- to jump straight to that scorecard.</div><div class="note">An entry needs more than 5 of their 15 picks still posting real scores (not cut or withdrawn) to stay eligible here -- entries that don't qualify are shown as DNQ below.</div><table id="tbl-day4"></table><div class="note" id="tbl-day4-note" style="display:none;">* = live running total (best 5 of however many have posted so far) -- not final until 5+ have scores.</div></div></div>
   <div class="panel" id="panel-scorecards">
     <input type="text" class="searchbox" id="scSearch" placeholder="Search entry name…">
     <div class="note">Every entry's 15 picks, live round-by-round scores (vs. par), and running total. <span class="live-mark" style="background:var(--lightgold); padding:1px 6px; border-radius:4px; color:var(--text); font-weight:700;">highlighted</span> scores are the ones actually counting toward that column's total right now.</div>
@@ -289,6 +296,7 @@
       <button id="payoutsUnlockBtn">Unlock</button>
     </div>
     <div id="payoutsContent" style="display:none;">
+      <div id="dayWinnerBanners-payouts"></div>
       <div class="note">Manually maintained -- prize amounts and winners are updated by hand as results are decided,
         not calculated live.</div>
       <div id="payoutsGrid"></div>
@@ -1006,12 +1014,30 @@ document.getElementById("tbTabs").addEventListener("click", (e) => {
 /* ====================== payouts (password-gated) ====================== */
 function payoutsTable(title, rows) {
   const body = rows.map(p =>
-    `<tr><td>${p.category}</td><td class="num">${p.prize}</td>` +
+    `<tr class="${p.winner ? 'payout-winner-row' : ''}"><td>${p.category}</td><td class="num">${p.prize}</td>` +
     `<td>${p.winner ? p.winner : '<span style="color:#889; font-style:italic;">TBD</span>'}</td></tr>`
   ).join("");
   return `<div class="card stats-card"><h3>${title}</h3>` +
     `<table><thead><tr><th>Category</th><th class="num">Prize</th><th>Winner</th></tr></thead>` +
     `<tbody>${body}</tbody></table></div>`;
+}
+
+function renderDayWinnerBanners() {
+  const TOURNAMENT = "Wyndham Championship (TEST)";
+  const dayInfo = [1, 2, 3, 4].map(n => {
+    const p = PAYOUTS.find(x => x.tournament === TOURNAMENT && x.category === "Day " + n);
+    return { n, winner: p && p.winner, prize: p && p.prize || "" };
+  });
+  const bannerHtml = (e) => `<div class="day-winner-banner">🏆 ${e.winner} won Day ${e.n} -- ${e.prize}! 🏆</div>`;
+  for (const e of dayInfo) {
+    const el = document.getElementById("dayWinnerBanner-day" + e.n);
+    if (el) el.innerHTML = e.winner ? bannerHtml(e) : "";
+  }
+  const allHtml = dayInfo.filter(e => e.winner).map(bannerHtml).join("");
+  const overallEl = document.getElementById("dayWinnerBanners-overall");
+  if (overallEl) overallEl.innerHTML = allHtml;
+  const payoutsEl = document.getElementById("dayWinnerBanners-payouts");
+  if (payoutsEl) payoutsEl.innerHTML = allHtml;
 }
 
 function renderPayouts() {
@@ -1840,6 +1866,7 @@ async function refreshAll() {
     renderDayTable("tbl-day3", rankWithTies(computed, "day3"), "day3", "Day 3", dnqEntrants);
     renderDayTable("tbl-day4", rankWithTies(computed, "day4"), "day4", "Day 4", dnqEntrants);
     renderUnofficialBanners(scoreData);
+    renderDayWinnerBanners();
     renderScorecards(computed.slice().sort((a, b) =>
       (a.lastName || a.fullName).localeCompare(b.lastName || b.fullName) || a.fullName.localeCompare(b.fullName)
     ), !!scoreData.revealTime);
