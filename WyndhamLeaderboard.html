@@ -110,6 +110,14 @@
   .sc-cut-cell{
     background:#e3e5e8; color:#666; font-weight:700; border-radius:4px;
   }
+  .sc-live-final{
+    font-size:.68rem; color:#fff; background:var(--green); border-radius:4px;
+    padding:1px 5px; margin-left:4px; font-weight:700; white-space:nowrap;
+  }
+  .sc-live-inprogress{font-size:.68rem; color:#1a56db; margin-left:4px; font-weight:600; white-space:nowrap;}
+  .sc-live-tee{font-size:.68rem; color:#889; margin-left:4px; font-style:italic; white-space:nowrap;}
+  .sc-live-wd{font-size:.68rem; color:var(--red); margin-left:4px; font-weight:700; white-space:nowrap;}
+  .sc-live-cut{font-size:.68rem; color:#889; margin-left:4px; font-weight:700; white-space:nowrap;}
   .searchbox{
     width:100%; max-width:320px; padding:8px 10px; border:1px solid var(--border);
     border-radius:6px; font-size:.9rem; margin:0 auto 14px; display:block;
@@ -583,6 +591,8 @@ async function fetchScores() {
     const rawName = c.athlete && c.athlete.displayName;
     if (!rawName) continue;
     const rounds = { 1: null, 2: null, 3: null, 4: null };
+    const thru = { 1: null, 2: null, 3: null, 4: null };
+    const teeTimes = { 1: null, 2: null, 3: null, 4: null };
     if (Array.isArray(c.linescores)) {
       for (const ls of c.linescores) {
         const period = ls.period;
@@ -593,6 +603,18 @@ async function fetchScores() {
         // tournament. parseToPar("E") -> 0, parseToPar("-2") -> -2, parseToPar("+3") -> 3.
         if (period >= 1 && period <= 4 && ls.displayValue != null && ls.displayValue !== "") {
           rounds[period] = parseToPar(ls.displayValue);
+        }
+        // Live in-round status for the Scorecards tab -- holes completed so far this round, plus
+        // this player's tee time for it (ESPN tucks the tee time into the last stat of the round's
+        // stat block; the hole-by-hole array length IS the holes-completed count -- 0 to 18).
+        // A round that hasn't started for ANYONE yet still shows up here as a bare {period: N}
+        // placeholder with no linescores/statistics at all -- must require the real array so that
+        // placeholder doesn't get read as "0 holes played" and mask the round actually in progress.
+        if (period >= 1 && period <= 4 && Array.isArray(ls.linescores)) {
+          thru[period] = ls.linescores.length;
+          const statCat = ls.statistics && ls.statistics.categories && ls.statistics.categories[0];
+          const teeStat = statCat && statCat.stats && statCat.stats[statCat.stats.length - 1];
+          teeTimes[period] = teeStat ? teeStat.displayValue : null;
         }
       }
     }
@@ -605,6 +627,8 @@ async function fetchScores() {
     const isCut = !isWD && (/cut/i.test(statusDesc) || (round3Available && !hasR3Entry));
     map.set(normalizeName(rawName), {
       rawName, r1: rounds[1], r2: rounds[2], r3: rounds[3], r4: rounds[4],
+      thru1: thru[1], thru2: thru[2], thru3: thru[3], thru4: thru[4],
+      tee1: teeTimes[1], tee2: teeTimes[2], tee3: teeTimes[3], tee4: teeTimes[4],
       cut: isCut, wd: isWD,
     });
   }
@@ -663,6 +687,31 @@ function golferRoundVsPar(golfer, roundNum) {
   if (!golfer) return null;
   const val = golfer["r" + roundNum];
   return (val == null) ? null : val; // round not yet posted -> null
+}
+
+// Live "what's happening right now" tag for a golfer on the Scorecards tab -- WD/CUT if
+// applicable, otherwise whichever round they most recently touched: "F" once all 18 holes are
+// in, "Thru N" mid-round, or their tee time if they haven't started that round yet.
+function golferLiveStatus(golfer) {
+  if (!golfer) return null;
+  if (golfer.wd) return { text: "WD", cls: "sc-live-wd" };
+  if (golfer.cut) return { text: "CUT", cls: "sc-live-cut" };
+  for (let n = 4; n >= 1; n--) {
+    const holesThru = golfer["thru" + n];
+    if (holesThru != null) {
+      if (holesThru >= 18) return { text: "F", cls: "sc-live-final" };
+      if (holesThru > 0) return { text: "Thru " + holesThru, cls: "sc-live-inprogress" };
+      const tee = golfer["tee" + n];
+      return tee ? { text: formatTeeTime(tee), cls: "sc-live-tee" } : null;
+    }
+  }
+  return null;
+}
+
+function formatTeeTime(raw) {
+  const d = new Date(raw);
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
 function golferTotal(golfer, r1, r2, r3, r4) {
@@ -728,7 +777,7 @@ function computeEntrant(entrant, scoresMap) {
     const r4 = golferRoundVsPar(golfer, 4);
     const total = golferTotal(golfer, r1, r2, r3, r4);
     const liveTotal = golferRunningTotal(golfer, r1, r2, r3, r4);
-    return { name: name || "(no pick)", r1, r2, r3, r4, total, liveTotal, found: !!golfer };
+    return { name: name || "(no pick)", r1, r2, r3, r4, total, liveTotal, found: !!golfer, live: golferLiveStatus(golfer) };
   });
   const r1s = slots.map(s => s.r1), r2s = slots.map(s => s.r2);
   const r3s = slots.map(s => s.r3), r4s = slots.map(s => s.r4);
@@ -907,7 +956,7 @@ function renderScorecards(entrants, picksRevealed) {
       const c3Class = isCutOrWd ? "sc-cut-cell" : c3;
       const c4Class = isCutOrWd ? "sc-cut-cell" : c4;
       const cTClass = isCutOrWd ? "sc-cut-cell" : cT;
-      rows += `<tr><td>${s.name}${s.found ? "" : ' <span class="cut">(no live match)</span>'}</td>` +
+      rows += `<tr><td>${s.name}${s.found ? "" : ' <span class="cut">(no live match)</span>'}${s.live ? ` <span class="${s.live.cls}">${s.live.text}</span>` : ""}</td>` +
         `<td class="num ${c1}">${fmtScore(s.r1)}</td><td class="num ${c2}">${fmtScore(s.r2)}</td>` +
         `<td class="num ${c3Class}">${r3Display}</td><td class="num ${c4Class}">${r4Display}</td>` +
         `<td class="num ${cTClass}">${totalDisplay}</td></tr>`;
