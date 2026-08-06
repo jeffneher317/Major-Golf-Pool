@@ -506,6 +506,35 @@ function selectEntrants(submissions, lockTime) {
   return out;
 }
 
+/* ====================== ESPN tee-time extraction ====================== */
+// ESPN does NOT actually expose a flat `teeTime` field on the period-1 linescore object (an
+// earlier assumption, made before any real Round 1 data existed to check against). Once real
+// scores started posting, inspection showed the tee time is instead buried as a plain formatted
+// string (e.g. "Thu Aug 06 06:50:00 PDT 2026") somewhere inside that round's
+// statistics.categories[0].stats array -- position not guaranteed, so this scans every stat's
+// displayValue for one matching that shape rather than trusting a fixed index. Parsed manually
+// (day/month/hour/timezone lookup) instead of handing the raw string to `new Date(...)`, since
+// browsers are inconsistent about parsing non-ISO date strings like this (Safari especially) --
+// this only ever needs to understand the small set of US timezone abbreviations PGA Tour events
+// actually use.
+const ESPN_TZ_OFFSETS = { EST: -5, EDT: -4, CST: -6, CDT: -5, MST: -7, MDT: -6, PST: -8, PDT: -7 };
+const ESPN_MONTHS = { Jan:0, Feb:1, Mar:2, Apr:3, May:4, Jun:5, Jul:6, Aug:7, Sep:8, Oct:9, Nov:10, Dec:11 };
+function extractEspnTeeTimeUTC(linescoreEntry) {
+  const stats = linescoreEntry.statistics && linescoreEntry.statistics.categories &&
+    linescoreEntry.statistics.categories[0] && linescoreEntry.statistics.categories[0].stats;
+  if (!Array.isArray(stats)) return null;
+  for (const s of stats) {
+    const m = s.displayValue && /^\w{3} (\w{3}) (\d{2}) (\d{2}):(\d{2}):(\d{2}) (\w{2,4}) (\d{4})$/.exec(s.displayValue.trim());
+    if (!m) continue;
+    const [, monStr, day, hh, mm, ss, tz, year] = m;
+    const month = ESPN_MONTHS[monStr];
+    const offset = ESPN_TZ_OFFSETS[tz];
+    if (month == null || offset == null) continue;
+    return new Date(Date.UTC(+year, month, +day, +hh - offset, +mm, +ss)).toISOString();
+  }
+  return null;
+}
+
 /* ====================== fetch: live scores ====================== */
 async function fetchScores() {
   const url = "https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard/" + ESPN_EVENT_ID;
@@ -541,8 +570,9 @@ async function fetchScores() {
     if (Array.isArray(c.linescores)) {
       for (const ls of c.linescores) {
         const period = ls.period;
-        if (period === 1 && ls.teeTime) {
-          if (!earliestR1TeeTimeUTC || ls.teeTime < earliestR1TeeTimeUTC) earliestR1TeeTimeUTC = ls.teeTime;
+        if (period === 1) {
+          const teeTimeUTC = extractEspnTeeTimeUTC(ls);
+          if (teeTimeUTC && (!earliestR1TeeTimeUTC || teeTimeUTC < earliestR1TeeTimeUTC)) earliestR1TeeTimeUTC = teeTimeUTC;
         }
         // ESPN's round-level linescore entry carries BOTH the raw stroke count (value: 70) and
         // an already-computed to-par string (displayValue: "-2", "E", "+3") -- using their own
