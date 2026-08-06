@@ -73,8 +73,13 @@
   .scorecard-grid{display:grid; grid-template-columns:1fr; gap:14px;}
   @media(min-width:820px){ .scorecard-grid{grid-template-columns:1fr 1fr;} }
   .sc-card{border:1px solid var(--border); border-radius:8px; overflow:hidden;}
+  .sc-card.sc-favorited{border:2px solid var(--gold);}
   .sc-head{background:var(--green); color:#fff; padding:8px 12px;}
   .sc-head .nm{font-weight:700; font-size:.95rem;}
+  .sc-fav-btn{
+    background:none; border:none; cursor:pointer; font-size:1rem; padding:0 6px 0 0;
+    vertical-align:middle; line-height:1; color:var(--gold);
+  }
   .sc-head .sub{font-size:.72rem; opacity:.9; margin-top:2px;}
   .sc-card table{font-size:.78rem;}
   .sc-card th{position:static; font-size:.68rem;}
@@ -307,14 +312,28 @@ const GROUP_PICKS = {"Group A": 5, "Group B": 4, "Group C": 3, "Group D": 2, "Gr
 const POOL_TIMEZONE = "America/New_York"; // must match the Google Sheet's configured timezone (Submitted At column)
 const OVERALL_PAYOUT_SPOTS = 6; // how many Overall places get paid, per the rules doc -- bump this up as the pool grows
 const OVERALL_TIEBREAK_DISPLAY_CAP = 6; // tiebreaker tab tracks ties through this place even if payout spots are fewer right now (room for the pool to grow) -- never shows 7th place or beyond
-// ESPN occasionally lags on flagging a golfer as withdrawn -- their score sits blank ("-") but
-// their status never actually switches to "Withdrawn", which blocks round-complete detection
-// (isRoundComplete) and skips the automatic alternate substitution (lookupGolfer) for anyone who
-// picked them. Add a golfer's name here EXACTLY as ESPN displays it to manually treat them as
-// withdrawn until ESPN's own data catches up -- safe to leave entries in permanently, since once
-// ESPN flags them WD on their own this has no additional effect. Remove the name once you no
-// longer need it, just to keep the list tidy.
-const MANUAL_WD_OVERRIDES = [];
+// Picks lock, and Scorecards/Stats reveal, at these manually-set moments -- NOT derived from ESPN.
+// ESPN's own tee-time data has proven unreliable twice over (no flat teeTime field at all, then a
+// mislabeled timezone once we found the real field), so this is now just a plain fact you look up
+// and type in before/during every tournament: find the tournament's real first Round 1 tee time
+// (a quick web search of golf news sites the morning-of works well), convert it to UTC yourself,
+// and set both constants below. Format: full UTC ISO string, e.g. "2026-08-06T10:50:00Z". Leave
+// either one as "" to leave that gate open/hidden indefinitely (picks never lock / Scorecards
+// never reveal) -- useful before you know the real time yet. These are usually the same instant,
+// but kept as two separate settings in case you ever want Scorecards to reveal later than the
+// picks cutoff.
+const PICKS_LOCK_TIME_UTC = "2026-08-06T10:50:00Z"; // 6:50 AM ET, Wyndham Round 1 -- confirmed first tee time
+const SCORECARDS_REVEAL_TIME_UTC = "2026-08-06T10:50:00Z";
+// ESPN sometimes never lists a withdrawn golfer at all (they're missing from the field entirely --
+// not just flagged "Withdrawn"), and separately, ESPN occasionally lags on flagging a golfer who IS
+// still listed as withdrawn (their score sits blank ("-") but status never switches to
+// "Withdrawn"). Both cases block the automatic alternate substitution (resolvePick) for anyone who
+// picked them. Add a golfer's name here EXACTLY as ESPN displays it (or as their Picks-sheet name,
+// for the entirely-missing case) to force alternate substitution regardless of which of the two
+// problems it is -- safe to leave entries in permanently, since once ESPN's own data is correct on
+// its own this has no additional effect. Remove the name once you no longer need it, just to keep
+// the list tidy.
+const MANUAL_WD_OVERRIDES = ["Daniel Berger", "Patrick Cantlay", "Garrick Higgo", "Taylor Moore"];
 // DNQ (did not qualify) rule: an entry needs MORE than this many of their 15 picks still posting
 // real scores (i.e. not shown as CUT or WD, and with a live ESPN match) to stay eligible for Day
 // 3, Day 4, and Overall standings/payouts. 5 or fewer qualifying picks -> DNQ, dropped from those
@@ -478,8 +497,8 @@ async function fetchPicks() {
 
 /* ====================== resolve one submission per entrant, honoring the picks lock ====================== */
 function selectEntrants(submissions, lockTime) {
-  // lockTime is the {parseable, display} object from utcToPoolTime(), or null if Round 1 hasn't
-  // produced a real score yet (picks stay open with no cutoff).
+  // lockTime is the {parseable, display} object from utcToPoolTime(), or null if PICKS_LOCK_TIME_UTC
+  // hasn't been set yet (picks stay open with no cutoff).
   const lockMs = lockTime ? parseSheetTimestamp(lockTime.parseable) : null;
   const groups = new Map();
   for (const s of submissions) {
@@ -506,35 +525,6 @@ function selectEntrants(submissions, lockTime) {
   return out;
 }
 
-/* ====================== ESPN tee-time extraction ====================== */
-// ESPN does NOT actually expose a flat `teeTime` field on the period-1 linescore object (an
-// earlier assumption, made before any real Round 1 data existed to check against). Once real
-// scores started posting, inspection showed the tee time is instead buried as a plain formatted
-// string (e.g. "Thu Aug 06 06:50:00 PDT 2026") somewhere inside that round's
-// statistics.categories[0].stats array -- position not guaranteed, so this scans every stat's
-// displayValue for one matching that shape rather than trusting a fixed index. Parsed manually
-// (day/month/hour/timezone lookup) instead of handing the raw string to `new Date(...)`, since
-// browsers are inconsistent about parsing non-ISO date strings like this (Safari especially) --
-// this only ever needs to understand the small set of US timezone abbreviations PGA Tour events
-// actually use.
-const ESPN_TZ_OFFSETS = { EST: -5, EDT: -4, CST: -6, CDT: -5, MST: -7, MDT: -6, PST: -8, PDT: -7 };
-const ESPN_MONTHS = { Jan:0, Feb:1, Mar:2, Apr:3, May:4, Jun:5, Jul:6, Aug:7, Sep:8, Oct:9, Nov:10, Dec:11 };
-function extractEspnTeeTimeUTC(linescoreEntry) {
-  const stats = linescoreEntry.statistics && linescoreEntry.statistics.categories &&
-    linescoreEntry.statistics.categories[0] && linescoreEntry.statistics.categories[0].stats;
-  if (!Array.isArray(stats)) return null;
-  for (const s of stats) {
-    const m = s.displayValue && /^\w{3} (\w{3}) (\d{2}) (\d{2}):(\d{2}):(\d{2}) (\w{2,4}) (\d{4})$/.exec(s.displayValue.trim());
-    if (!m) continue;
-    const [, monStr, day, hh, mm, ss, tz, year] = m;
-    const month = ESPN_MONTHS[monStr];
-    const offset = ESPN_TZ_OFFSETS[tz];
-    if (month == null || offset == null) continue;
-    return new Date(Date.UTC(+year, month, +day, +hh - offset, +mm, +ss)).toISOString();
-  }
-  return null;
-}
-
 /* ====================== fetch: live scores ====================== */
 async function fetchScores() {
   const url = "https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard/" + ESPN_EVENT_ID;
@@ -550,8 +540,6 @@ async function fetchScores() {
   const competitors = (comp && comp.competitors) || [];
 
   const map = new Map(); // normalized name -> {rawName, r1,r2,r3,r4 (each vs. par), status}
-  let roundOneStarted = false;      // true once ANY competitor has a real posted Round 1 score
-  let earliestR1TeeTimeUTC = null;  // earliest Round 1 tee time across the whole field
   // ESPN's own c.status field is unreliable for this endpoint -- confirmed empirically that it
   // comes back completely empty for this event (no "cut"/"withdrawn" text anywhere in the feed),
   // even though ESPN's own website clearly shows CUT for the right players. Their site pulls that
@@ -570,10 +558,6 @@ async function fetchScores() {
     if (Array.isArray(c.linescores)) {
       for (const ls of c.linescores) {
         const period = ls.period;
-        if (period === 1) {
-          const teeTimeUTC = extractEspnTeeTimeUTC(ls);
-          if (teeTimeUTC && (!earliestR1TeeTimeUTC || teeTimeUTC < earliestR1TeeTimeUTC)) earliestR1TeeTimeUTC = teeTimeUTC;
-        }
         // ESPN's round-level linescore entry carries BOTH the raw stroke count (value: 70) and
         // an already-computed to-par string (displayValue: "-2", "E", "+3") -- using their own
         // computed to-par directly means this page never needs its own PAR constant to agree
@@ -581,7 +565,6 @@ async function fetchScores() {
         // tournament. parseToPar("E") -> 0, parseToPar("-2") -> -2, parseToPar("+3") -> 3.
         if (period >= 1 && period <= 4 && ls.displayValue != null && ls.displayValue !== "") {
           rounds[period] = parseToPar(ls.displayValue);
-          if (period === 1) roundOneStarted = true;
         }
       }
     }
@@ -598,16 +581,15 @@ async function fetchScores() {
     });
   }
 
-  // Picks lock the moment the first real Round 1 score actually shows up -- proof play has
-  // started -- rather than trusting a configured start time that could be wrong or missing. The
-  // cutoff INSTANT used is the earliest Round 1 tee time (a fixed point), not "whenever we
-  // happened to poll", so the lock doesn't creep later depending on refresh timing.
-  const lockTime = (roundOneStarted && earliestR1TeeTimeUTC) ? utcToPoolTime(earliestR1TeeTimeUTC) : null;
+  // Picks lock, and Scorecards/Stats reveal, at the manually-set moments configured up top --
+  // see PICKS_LOCK_TIME_UTC / SCORECARDS_REVEAL_TIME_UTC for why this isn't derived from ESPN.
+  const lockTime = PICKS_LOCK_TIME_UTC ? utcToPoolTime(PICKS_LOCK_TIME_UTC) : null;
+  const revealTime = SCORECARDS_REVEAL_TIME_UTC ? utcToPoolTime(SCORECARDS_REVEAL_TIME_UTC) : null;
 
   return {
     map, eventName: event.name || TOURNAMENT_NAME,
     status: (event.status && event.status.type && event.status.type.description) || "",
-    lockTime,
+    lockTime, revealTime,
   };
 }
 
@@ -633,9 +615,14 @@ function lookupGolfer(name, scoresMap) {
 
 function resolvePick(pickSlot, scoresMap) {
   // If the primary pick withdrew, fall back to the alternate -- same rule as Scoring!Resolved.
+  // Two ways a pick counts as "withdrew" here: (1) ESPN has them and flags them wd (g.wd), or
+  // (2) they're not in ESPN's field at all (g is null) AND their name is in MANUAL_WD_OVERRIDES --
+  // this second case covers golfers who withdrew before the field was finalized and so never show
+  // up in ESPN's data whatsoever, which g.wd alone can never catch (there's no g to flag).
   let name = pickSlot.primary;
   let g = name ? lookupGolfer(name, scoresMap) : null;
-  if (g && g.wd && pickSlot.alt) {
+  const isManualWD = name && MANUAL_WD_OVERRIDES.some(n => normalizeName(n) === normalizeName(name));
+  if (((g && g.wd) || (!g && isManualWD)) && pickSlot.alt) {
     const altG = lookupGolfer(pickSlot.alt, scoresMap);
     if (altG) { name = pickSlot.alt; g = altG; }
   }
@@ -827,22 +814,51 @@ function renderDayTable(tblId, ranked, dayKey, label, dnqEntrants) {
   if (note) note.style.display = ranked.some(e => e[partialKey]) ? "block" : "none";
 }
 
+/* ====================== favorite scorecards (browser-local, no login) ====================== */
+// Stored in this browser's own localStorage -- pins a card to the top of Scorecards on THIS
+// device only, no login/account needed. Won't follow someone to a different phone/computer, and
+// clears if they clear their browser data, but that's a fine tradeoff for "keep my own card handy"
+// -- a real login system is a much bigger lift for a feature this small (see Build Notes).
+const FAVORITES_KEY = "golfPoolFavoriteScorecards";
+function getFavorites() {
+  try { return new Set(JSON.parse(localStorage.getItem(FAVORITES_KEY) || "[]")); }
+  catch { return new Set(); }
+}
+function isFavorited(fullName) { return getFavorites().has(normalizeName(fullName)); }
+function toggleFavorite(fullName) {
+  const favs = getFavorites();
+  const key = normalizeName(fullName);
+  if (favs.has(key)) favs.delete(key); else favs.add(key);
+  localStorage.setItem(FAVORITES_KEY, JSON.stringify([...favs]));
+}
+let lastScorecardEntrants = null; // remembered so a favorite-star click can re-render instantly
+                                   // instead of waiting for the next REFRESH_MS auto-refresh
+
 function renderScorecards(entrants, picksRevealed) {
   const grid = document.getElementById("scorecardGrid");
-  // Scorecards show every entry's actual picks -- must stay hidden until picks lock (first Round 1
-  // tee time), otherwise someone who finds this link before Thursday could see everyone else's
-  // picks ahead of the deadline. picksRevealed mirrors scoreData.lockTime from fetchScores(): null
-  // until ESPN shows a real Round 1 score, so this gate needs no separately-maintained date/time.
+  // Scorecards show every entry's actual picks -- must stay hidden until the reveal time, otherwise
+  // someone who finds this link before Thursday could see everyone else's picks ahead of the
+  // deadline. picksRevealed mirrors scoreData.revealTime from fetchScores(): null until
+  // SCORECARDS_REVEAL_TIME_UTC is filled in up top.
   if (!picksRevealed) {
     grid.innerHTML = '<div class="tb-provisional" style="text-align:center;">' +
       '🔒 Scorecards are hidden until picks lock at the first Round 1 tee time Thursday morning. ' +
       'Check back once the tournament starts.</div>';
     return;
   }
+  lastScorecardEntrants = entrants;
+  const favs = getFavorites();
+  // Favorited entrants float to the top (stable sort -- everyone else keeps the incoming
+  // alphabetical-by-last-name order the caller already sorted them into).
+  const sortedEntrants = entrants
+    .map((e, i) => ({ e, i, fav: favs.has(normalizeName(e.fullName)) ? 0 : 1 }))
+    .sort((a, b) => a.fav - b.fav || a.i - b.i)
+    .map(x => x.e);
   grid.innerHTML = "";
-  for (const e of entrants) {
+  for (const e of sortedEntrants) {
     const div = document.createElement("div");
-    div.className = "sc-card";
+    const isFav = favs.has(normalizeName(e.fullName));
+    div.className = "sc-card" + (isFav ? " sc-favorited" : "");
     div.dataset.searchKey = normalizeName(e.fullName);
     let rows = "";
     e.slots.forEach((s, idx) => {
@@ -877,7 +893,7 @@ function renderScorecards(entrants, picksRevealed) {
       `<td class="num">${fmtScoreLive(e.overall, e.overallPartial)}</td></tr>`;
     div.innerHTML = `
       <div class="sc-head">
-        <div class="nm">${e.fullName}${e.locked ? '<span class="locked-badge">⚠ Late — not counted</span>' : (e.dnq ? '<span class="dnq-badge">⚠ DNQ — not eligible for Day 3/4/Overall</span>' : '')}</div>
+        <div class="nm"><button class="sc-fav-btn" data-fav-name="${e.fullName.replace(/"/g, "&quot;")}" title="${isFav ? "Unpin from top" : "Pin to top of Scorecards"}">${isFav ? "⭐" : "☆"}</button>${e.fullName}${e.locked ? '<span class="locked-badge">⚠ Late — not counted</span>' : (e.dnq ? '<span class="dnq-badge">⚠ DNQ — not eligible for Day 3/4/Overall</span>' : '')}</div>
         <div class="sub">${e.locked ? "Submitted after picks locked (" + e.submittedAt + ") -- picks not counted." : "Day1: " + fmtScoreLive(e.day1, e.day1Partial) + " &nbsp; Day2: " + fmtScoreLive(e.day2, e.day2Partial) + " &nbsp; Day3: " + fmtScoreLive(e.day3, e.day3Partial) + " &nbsp; Day4: " + fmtScoreLive(e.day4, e.day4Partial) + " &nbsp; Overall: " + fmtScoreLive(e.overall, e.overallPartial)}</div>
       </div>
       <table>
@@ -902,6 +918,15 @@ document.getElementById("scSearch").addEventListener("input", (e) => {
   document.querySelectorAll(".sc-card").forEach(card => {
     card.style.display = card.dataset.searchKey.includes(q) ? "" : "none";
   });
+});
+
+document.getElementById("scorecardGrid").addEventListener("click", (e) => {
+  const btn = e.target.closest(".sc-fav-btn");
+  if (!btn) return;
+  toggleFavorite(btn.dataset.favName);
+  // Re-render immediately from the last data we already have, rather than waiting up to
+  // REFRESH_MS for the next auto-refresh to pick up the change.
+  if (lastScorecardEntrants) renderScorecards(lastScorecardEntrants, true);
 });
 
 /* ====================== tabs ====================== */
@@ -1729,9 +1754,9 @@ async function refreshAll() {
     renderUnofficialBanners(scoreData);
     renderScorecards(computed.slice().sort((a, b) =>
       (a.lastName || a.fullName).localeCompare(b.lastName || b.fullName) || a.fullName.localeCompare(b.fullName)
-    ), !!scoreData.lockTime);
+    ), !!scoreData.revealTime);
     renderTiebreakers(computed, scoreData);
-    renderStats(computed, !!scoreData.lockTime);
+    renderStats(computed, !!scoreData.revealTime);
     renderMessageNameOptions(computed);
     // Message board is intentionally isolated from the rest of this try block -- a hiccup loading
     // the Messages feed (e.g. MESSAGES_TSV_URL not filled in yet) should never take down the live
@@ -1754,7 +1779,7 @@ async function refreshAll() {
       ? (entrantsRaw.length - lockedCount) + " entries loaded (" + lockedCount + " late submission" + (lockedCount === 1 ? "" : "s") + " excluded)."
       : entrantsRaw.length + " entries loaded.";
     const lockNote = scoreData.lockTime
-      ? " Picks locked as of " + scoreData.lockTime.display + " (first tee time)."
+      ? " Picks locked as of " + scoreData.lockTime.display + "."
       : "";
     document.getElementById("footNote").textContent =
       countNote + " Scores pulled live from ESPN; refreshes automatically every " +
