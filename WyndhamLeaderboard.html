@@ -1852,8 +1852,8 @@ async function refreshAll() {
     fetchMessages().then(renderMessageFeed).catch(() => {
       const feed = document.getElementById("messageFeed");
       if (feed) feed.innerHTML = '<div class="note">Couldn\'t load messages right now.</div>';
-Back to top
-  class="back-to-top"
+    });
+
     // loading the poll's response Sheet never takes down the live scores/standings.
     fetchPoll1Results().then(renderPoll1Results).catch(() => {
       const el = document.getElementById("poll1Results");
