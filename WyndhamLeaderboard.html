@@ -1104,7 +1104,8 @@ function renderDayWinnerBanners() {
     const el = document.getElementById("dayWinnerBanner-day" + e.n);
     if (el) el.innerHTML = e.winner ? bannerHtml(e) : "";
   }
-  const allHtml = dayInfo.filter(e => e.winner).map(bannerHtml).join("");
+  const withWinner = dayInfo.filter(e => e.winner);
+  const allHtml = withWinner.length ? bannerHtml(withWinner[withWinner.length - 1]) : "";
   const payoutsEl = document.getElementById("dayWinnerBanners-payouts");
   if (payoutsEl) payoutsEl.innerHTML = allHtml;
 }
