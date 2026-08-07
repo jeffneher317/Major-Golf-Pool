@@ -117,6 +117,223 @@
   .num{color:#8a978a; font-size:.8rem; margin-right:4px;}
   .wgr{float:right; font-size:.75rem; color:#8a7420; background:#fdf6e0; padding:1px 6px; border-radius:4px;}
   .plist li.picked{background:var(--lightgreen); border-radius:4px; padding-left:2px;}
+  .plist li.picked-alt{background:var(--lightgold); border-radius:4px; padding-left:2px;}
+  .roster-cb{margin-right:6px; vertical-align:middle; cursor:pointer;}
+  .rosterFullMsg{font-size:.72rem; color:var(--red); margin-left:6px;}
+  @media (max-width:480px){ ol.plist{columns:1;} }
+  /* ---- who's submitted tab ---- */
+  .statusbar{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; flex-wrap:wrap;}
+  .statusbar span{font-size:.8rem; color:#667;}
+  .statusbar button{
+    width:auto; background:#fff; border:1px solid var(--border); color:var(--green-dark);
+    padding:6px 12px; border-radius:6px; font-size:.8rem; font-weight:600; margin-bottom:0;
+  }
+  .statusbar button:hover{background:var(--lightgreen);}
+  .delaynote{
+    background:var(--lightgold); border:1px solid var(--gold); border-radius:8px;
+    padding:10px 14px; font-size:.82rem; color:#5a4a10; margin-bottom:14px; line-height:1.5;
+  }
+  #dataError{
+    display:none; background:var(--lightred); color:var(--red); border:1px solid #f0c9c6;
+    padding:10px 14px; border-radius:6px; font-size:.85rem; margin:10px 0; text-align:left;
+    white-space:pre-wrap;
+  }
+  table{width:100%; border-collapse:collapse; font-size:.85rem;}
+  th,td{padding:8px 10px; text-align:left; border-bottom:1px solid var(--border);}
+  th{
+    background:var(--green); color:#fff; font-size:.75rem; text-transform:uppercase;
+    letter-spacing:.03em;
+  }
+  tr:nth-child(even) td{background:#fafbfa;}
+  .me-hint{background:var(--lightgreen) !important;}
+  .searchbox{
+    width:100%; max-width:320px; padding:8px 10px; border:1px solid var(--border);
+    border-radius:6px; font-size:.9rem; margin:0 auto 14px; display:block;
+  }
+  .submitted-none{text-align:center; color:#889; font-size:.85rem; padding:20px 0;}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+
+<div id="gateOverlay">
+  <div class="gateCard">
+    <h2>🔒 Entry Password Required</h2>
+    <p>This pool is by invitation only. Enter the password shared with entries to make your picks.</p>
+    <input type="password" id="gatePassword" placeholder="Password" autocomplete="off">
+    <div class="gateErr" id="gateErr"></div>
+    <button id="gateBtn" type="button">Enter</button>
+  </div>
+</div>
+
+<div id="mainContent">
+<header>
+  <h1>Wyndham Championship (TEST)</h1>
+  <p id="eventLabel">Sedgefield Country Club</p>
+  <p id="courseInfo" style="font-size:.85rem; opacity:.85; margin-top:4px;"></p>
+</header>
+
+<div class="wrap">
+
+  <div class="tabs" id="tabs">
+    <div class="tab active" data-panel="picks">Make Your Picks</div>
+    <div class="tab" data-panel="rosters">Group Rosters</div>
+    <div class="tab" data-panel="submitted">Who's Submitted</div>
+  </div>
+
+  <!-- ====================== PANEL: Make Your Picks ====================== -->
+  <div class="panel active" id="panel-picks">
+
+  <div class="deadline-note" id="deadlineNote"></div>
+  <p class="note" style="text-align:center; margin:-8px 0 16px;">Changed your mind? Submitting again is totally fine — whichever submission has the latest timestamp before the deadline is the one that counts as your entry.</p>
+
+  <div class="card">
+    <h2>Your Info</h2>
+    <label for="firstName">First Name</label>
+    <input type="text" id="firstName" placeholder="e.g. Jeff" autocomplete="given-name">
+    <label for="lastName">Last Name</label>
+    <input type="text" id="lastName" placeholder="e.g. Neher" autocomplete="family-name">
+    <div class="err" id="nameErr">Please enter your first and last name.</div>
+    <div class="roster-msg" id="rosterMsg" style="display:none;"></div>
+    <label id="newEntryLabel" style="display:none; margin-top:6px; font-weight:400;">
+      <input type="checkbox" id="newEntryCheck" style="width:auto; display:inline-block; margin-right:6px; vertical-align:middle;">
+      <span>I'm not on this list — I'm new to the pool this season</span>
+    </label>
+    <p class="note">Pick from each of the 5 groups below (5 from Group A, 4 from Group B, 3 from Group C, 2 from Group D, 1 from Group E — 15 total), plus 1 alternate per group. The alternate only comes into play if one of your picks in that group withdraws before or during Round 1 or 2. No duplicate golfers across your whole team. Not sure who's in each group? Check the <a href="#" data-goto-panel="rosters" style="color:var(--green-dark); font-weight:600;">Group Rosters</a> tab above.</p>
+  </div>
+
+  <div id="groupsContainer"></div>
+
+  <div class="card" id="summary">
+    <h2>Review &amp; Send</h2>
+    <div class="status ok" id="okMsg">Looks good! Choose how to send your picks below.</div>
+    <label>Plain-text summary (for email/text)</label>
+    <textarea id="summaryText" readonly></textarea>
+    <label style="margin-top:14px;">Data row (paste directly into the Picks tab) <span style="font-weight:400; font-style:italic; color:#889;">— pay no attention to the man behind the curtain; this one's only for the all-powerful Oz</span></label>
+    <textarea id="csvText" readonly style="height:60px;"></textarea>
+  </div>
+
+  <div class="actions">
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wyndham Championship (TEST) — Make Your Picks</title>
+<style>
+  :root{
+    --green:#155724; --green-dark:#0d3a19; --gold:#c9a227; --bg:#f4f6f4;
+    --card:#ffffff; --border:#d7ddd7; --red:#b3261e; --text:#1b1f1b;
+    --lightgreen:#e6f4ea; --lightgold:#fdf3d0; --lightred:#fbeaea;
+  }
+  *{box-sizing:border-box;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg); color:var(--text); margin:0; padding:0 0 60px;
+  }
+  header{
+    background:linear-gradient(135deg,var(--green-dark),var(--green));
+    color:#fff; padding:28px 20px 22px; text-align:center;
+  }
+  header h1{margin:0 0 6px; font-size:1.5rem;}
+  header p{margin:0; opacity:.9; font-size:.95rem;}
+  .wrap{max-width:820px; margin:0 auto; padding:20px;}
+  .card{
+    background:var(--card); border:1px solid var(--border); border-radius:10px;
+    padding:20px; margin-bottom:18px; box-shadow:0 1px 3px rgba(0,0,0,.04);
+  }
+  .card h2{margin-top:0; font-size:1.15rem; border-bottom:2px solid var(--gold); padding-bottom:8px;}
+  label{display:block; font-weight:600; font-size:.85rem; margin:12px 0 4px;}
+  input[type=text], select{
+    width:100%; padding:9px 10px; border:1px solid var(--border); border-radius:6px;
+    font-size:1rem; background:#fff;
+  }
+  .pickrow{display:grid; grid-template-columns:28px 1fr; gap:8px; align-items:center; margin-bottom:8px;}
+  .picknum{font-weight:700; color:var(--green); text-align:right; font-size:.9rem;}
+  .altrow{margin-top:14px; padding-top:12px; border-top:1px dashed var(--border);}
+  .altrow label{color:var(--red);}
+  /* searchable pick dropdown -- tap/click the field, type a few letters, tap a name */
+  .combo{position:relative;}
+  .combo-input{cursor:pointer;}
+  .combo-list{
+    display:none; position:absolute; top:100%; left:0; right:0; z-index:20; margin-top:2px;
+    background:#fff; border:1px solid var(--border); border-radius:6px; box-shadow:0 4px 14px rgba(0,0,0,.12);
+    max-height:220px; overflow-y:auto;
+  }
+  .combo-list.open{display:block;}
+  .combo-item{padding:9px 12px; font-size:.92rem; cursor:pointer;}
+  .combo-item:hover, .combo-item.active{background:var(--lightgreen);}
+  .combo-empty{padding:9px 12px; font-size:.85rem; color:#889;}
+  .groupmeta{font-size:.8rem; color:#556; margin-bottom:10px;}
+  .err{color:var(--red); font-size:.85rem; margin-top:6px; display:none;}
+  .roster-msg{
+    background:var(--lightgold, #fdf3d0); border:1px solid var(--gold); border-radius:6px;
+    padding:8px 10px; font-size:.82rem; color:#7a6420; margin-top:8px; line-height:1.4;
+  }
+  .deadline-note{
+    background:var(--lightgold, #fdf3d0); border:1px solid var(--gold); border-radius:8px;
+    padding:10px 14px; font-size:.85rem; color:#7a6420; margin-bottom:16px; line-height:1.5;
+    text-align:center; font-weight:600;
+  }
+  .actions{position:sticky; bottom:0; background:var(--bg); padding:16px 0 4px;}
+  button{
+    width:100%; padding:14px; font-size:1.05rem; font-weight:700; border:none;
+    border-radius:8px; cursor:pointer; margin-bottom:10px;
+  }
+  #submitBtn{background:var(--green); color:#fff;}
+  #submitBtn:hover{background:var(--green-dark);}
+  #submitBtn.reviewed{
+    background:#fff; border:1px solid var(--border); color:#556; box-shadow:none;
+    font-size:.8rem; font-weight:600; padding:8px 10px;
+  }
+  #submitOnlineBtn{background:var(--green); color:#fff; font-size:1.1rem;}
+  #submitOnlineBtn:hover{background:var(--green-dark);}
+  #submitOnlineBtn:disabled{opacity:.7; cursor:default;}
+  .secondary{
+    background:#fff; border:1px solid var(--border) !important; color:#556;
+    font-size:.8rem; font-weight:600; padding:8px 10px;
+  }
+  #summary{display:none;}
+  #summary textarea{
+    width:100%; height:150px; font-family:ui-monospace,Menlo,Consolas,monospace;
+    font-size:.8rem; padding:10px; border:1px solid var(--border); border-radius:6px;
+  }
+  .status{padding:10px 14px; border-radius:6px; font-size:.9rem; margin-bottom:12px;}
+  .status.ok{background:#e6f4ea; color:var(--green-dark); border:1px solid #b9dcc2;}
+  .note{font-size:.8rem; color:#667; line-height:1.4;}
+  .flex-btns{display:flex; gap:10px;}
+  .flex-btns button{flex:1;}
+  #gateOverlay{
+    position:fixed; inset:0; background:linear-gradient(135deg,var(--green-dark),var(--green));
+    display:flex; align-items:center; justify-content:center; z-index:1000; padding:20px;
+  }
+  .gateCard{
+    background:#fff; border-radius:12px; padding:32px 28px; max-width:360px; width:100%;
+    text-align:center; box-shadow:0 8px 24px rgba(0,0,0,.25);
+  }
+  .gateCard h2{margin:0 0 6px; font-size:1.2rem; color:var(--green-dark);}
+  .gateCard p{margin:0 0 16px; font-size:.85rem; color:#556;}
+  .gateCard input{margin-bottom:10px; text-align:center;}
+  .gateCard button{background:var(--green); color:#fff;}
+  .gateErr{color:var(--red); font-size:.85rem; min-height:18px; margin-bottom:6px;}
+  #mainContent{display:none;}
+  /* ---- tabs (shared pattern with the Leaderboard page) ---- */
+  .tabs{display:flex; gap:6px; flex-wrap:wrap; margin:0 0 16px; justify-content:center;}
+  .tab{
+    background:#fff; border:1px solid var(--border); color:#556; padding:8px 16px;
+    border-radius:20px; font-size:.85rem; font-weight:600; cursor:pointer;
+  }
+  .tab.active{background:var(--green); border-color:var(--green); color:#fff;}
+  .panel{display:none;}
+  .panel.active{display:block;}
+  /* ---- group rosters tab ---- */
+  .pickcount{font-weight:400; font-size:.85rem; color:#556;}
+  ol.plist{list-style:none; margin:0; padding:0; columns:2; column-gap:24px;}
+  ol.plist li{break-inside:avoid; padding:5px 0; font-size:.92rem; border-bottom:1px solid #eef1ee;}
+  .num{color:#8a978a; font-size:.8rem; margin-right:4px;}
+  .wgr{float:right; font-size:.75rem; color:#8a7420; background:#fdf6e0; padding:1px 6px; border-radius:4px;}
+  .plist li.picked{background:var(--lightgreen); border-radius:4px; padding-left:2px;}
+  .plist li.picked-alt{background:var(--lightgold); border-radius:4px; padding-left:2px;}
   .roster-cb{margin-right:6px; vertical-align:middle; cursor:pointer;}
   .rosterFullMsg{font-size:.72rem; color:var(--red); margin-left:6px;}
   @media (max-width:480px){ ol.plist{columns:1;} }
@@ -237,6 +454,19 @@
 
   <!-- ====================== PANEL: Group Rosters ====================== -->
   <div class="panel" id="panel-rosters">
+    <div class="card">
+      <h2>Your Info</h2>
+      <label for="firstNameRoster">First Name</label>
+      <input type="text" id="firstNameRoster" placeholder="e.g. Jeff" autocomplete="given-name">
+      <label for="lastNameRoster">Last Name</label>
+      <input type="text" id="lastNameRoster" placeholder="e.g. Neher" autocomplete="family-name">
+      <p class="note" style="margin-top:10px;">
+        Check boxes below in order. Once your group's picks are full, the next box you check becomes your alternate.<br>
+        <span style="display:inline-block;width:12px;height:12px;background:var(--lightgreen);border-radius:3px;margin-right:6px;vertical-align:middle;"></span>Picked
+        &nbsp;&nbsp;&nbsp;
+        <span style="display:inline-block;width:12px;height:12px;background:var(--lightgold);border-radius:3px;margin-right:6px;vertical-align:middle;"></span>Alternate
+      </p>
+    </div>
     <div class="card">
       <h2>Group A <span class="pickcount">— pick 5</span></h2>
       <div class="groupmeta">23 players in this group, listed best to worst by World Golf Ranking.</div>
@@ -538,8 +768,12 @@ function getPrimaryPickCombos(gname) {
   return Array.from(document.querySelectorAll('.combo[data-group="' + gname + '"]'))
     .filter(c => c.dataset.slot !== 'alt');
 }
+function getAltCombo(gname) {
+  return document.querySelector('.combo[data-group="' + gname + '"][data-slot="alt"]');
+}
 function findComboHoldingName(gname, name) {
-  return getPrimaryPickCombos(gname).find(c => c.querySelector('.pick-select').value === name);
+  return Array.from(document.querySelectorAll('.combo[data-group="' + gname + '"]'))
+    .find(c => c.querySelector('.pick-select').value === name);
 }
 function findEmptyCombo(gname) {
   return getPrimaryPickCombos(gname).find(c => c.querySelector('.pick-select').value === '');
@@ -552,10 +786,16 @@ function setComboValue(comboEl, name) {
 }
 function syncRosterFromPicks() {
   document.querySelectorAll('.roster-cb').forEach(cb => {
-    const picked = !!findComboHoldingName(cb.dataset.group, cb.dataset.name);
-    cb.checked = picked;
+    const gname = cb.dataset.group, name = cb.dataset.name;
+    const altCombo = getAltCombo(gname);
+    const isAlt = !!(altCombo && altCombo.querySelector('.pick-select').value === name);
+    const isPrimary = !isAlt && getPrimaryPickCombos(gname).some(c => c.querySelector('.pick-select').value === name);
+    cb.checked = isPrimary || isAlt;
     const li = cb.closest('li');
-    if (li) li.classList.toggle('picked', picked);
+    if (li) {
+      li.classList.toggle('picked', isPrimary);
+      li.classList.toggle('picked-alt', isAlt);
+    }
   });
 }
 let rosterFullTimer = null;
@@ -564,7 +804,7 @@ function showRosterFullNote(li, gname) {
   if (existing) existing.remove();
   const note = document.createElement('span');
   note.className = 'rosterFullMsg';
-  note.textContent = gname + ' is full -- uncheck one first';
+  note.textContent = gname + ' picks + alternate are full -- uncheck one first';
   li.appendChild(note);
   clearTimeout(rosterFullTimer);
   rosterFullTimer = setTimeout(() => note.remove(), 2500);
@@ -587,12 +827,19 @@ function initRosterCheckboxes() {
       cb.addEventListener('change', () => {
         if (cb.checked) {
           const empty = findEmptyCombo(gname);
-          if (!empty) {
-            cb.checked = false;
-            showRosterFullNote(li, gname);
-            return;
+          if (empty) {
+            setComboValue(empty, name);
+          } else {
+            const altCombo = getAltCombo(gname);
+            const altEmpty = altCombo && altCombo.querySelector('.pick-select').value === '';
+            if (altEmpty) {
+              setComboValue(altCombo, name);
+            } else {
+              cb.checked = false;
+              showRosterFullNote(li, gname);
+              return;
+            }
           }
-          setComboValue(empty, name);
         } else {
           const combo = findComboHoldingName(gname, name);
           if (combo) setComboValue(combo, '');
@@ -605,6 +852,16 @@ function initRosterCheckboxes() {
 }
 initRosterCheckboxes();
 syncRosterFromPicks();
+
+function mirrorNameField(sourceId, targetId) {
+  const src = document.getElementById(sourceId);
+  const tgt = document.getElementById(targetId);
+  if (src && tgt) src.addEventListener('input', () => { tgt.value = src.value; });
+}
+mirrorNameField('firstName', 'firstNameRoster');
+mirrorNameField('firstNameRoster', 'firstName');
+mirrorNameField('lastName', 'lastNameRoster');
+mirrorNameField('lastNameRoster', 'lastName');
 
 document.getElementById('eventLabel').textContent = TOURNAMENT_NAME;
 document.getElementById('courseInfo').textContent = COURSE_INFO;
