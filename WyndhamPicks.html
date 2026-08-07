@@ -151,6 +151,11 @@
     border-radius:6px; font-size:.9rem; margin:0 auto 14px; display:block;
   }
   .submitted-none{text-align:center; color:#889; font-size:.85rem; padding:20px 0;}
+  #gotoReviewBtn{background:var(--green); color:#fff; margin-top:12px;}
+  #gotoReviewBtn:hover{background:var(--green-dark);}
+  .back-to-top{position:fixed; right:18px; bottom:18px; width:46px; height:46px; padding:0; border-radius:50%; background:var(--green-dark); color:#fff; border:none; cursor:pointer; font-size:1.3rem; line-height:1; display:flex; align-items:center; justify-content:center; box-shadow:0 2px 10px rgba(0,0,0,.3); opacity:0; visibility:hidden; transform:translateY(10px); transition:opacity .25s ease, transform .25s ease, visibility .25s; z-index:500;}
+  .back-to-top.show{opacity:1; visibility:visible; transform:translateY(0);}
+  .back-to-top:hover{background:var(--green);}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -250,6 +255,7 @@
         &nbsp;&nbsp;&nbsp;
         <span style="display:inline-block;width:12px;height:12px;background:var(--lightgold);border-radius:3px;margin-right:6px;vertical-align:middle;"></span>Alternate
       </p>
+      <button type="button" id="gotoReviewBtn">📝 Review My Picks →</button>
     </div>
     <div class="card">
       <h2>Group A <span class="pickcount">— pick 5</span></h2>
@@ -317,6 +323,8 @@
   </div>
   <div id="receiptGroups"></div>
 </div>
+
+<button type="button" id="backToTopBtn" class="back-to-top" aria-label="Back to top" title="Back to top">↑</button>
 
 <script>
 /* ====================== CONFIG — edit this each tournament ====================== */
@@ -1107,6 +1115,27 @@ document.getElementById('submittedSearch').addEventListener('input', (e) => {
 
 refreshSubmitted();
 setInterval(refreshSubmitted, SUBMITTED_REFRESH_MS);
+
+/* ==================== back-to-top button (site-wide) ==================== */
+const backToTopBtn = document.getElementById("backToTopBtn");
+if (backToTopBtn) {
+  window.addEventListener("scroll", () => {
+    if (window.scrollY > 300) backToTopBtn.classList.add("show");
+    else backToTopBtn.classList.remove("show");
+  });
+  backToTopBtn.addEventListener("click", () => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+}
+
+/* ==================== Group Rosters -> Review My Picks shortcut ==================== */
+const gotoReviewBtn = document.getElementById("gotoReviewBtn");
+if (gotoReviewBtn) {
+  gotoReviewBtn.addEventListener("click", () => {
+    activatePanel("picks");
+    window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" });
+  });
+}
 </script>
 
 </body>
