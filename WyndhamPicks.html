@@ -116,6 +116,9 @@
   ol.plist li{break-inside:avoid; padding:5px 0; font-size:.92rem; border-bottom:1px solid #eef1ee;}
   .num{color:#8a978a; font-size:.8rem; margin-right:4px;}
   .wgr{float:right; font-size:.75rem; color:#8a7420; background:#fdf6e0; padding:1px 6px; border-radius:4px;}
+  .plist li.picked{background:var(--lightgreen); border-radius:4px; padding-left:2px;}
+  .roster-cb{margin-right:6px; vertical-align:middle; cursor:pointer;}
+  .rosterFullMsg{font-size:.72rem; color:var(--red); margin-left:6px;}
   @media (max-width:480px){ ol.plist{columns:1;} }
   /* ---- who's submitted tab ---- */
   .statusbar{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; flex-wrap:wrap;}
@@ -496,6 +499,7 @@ function setupCombobox(comboEl) {
     input.value = displayName(name);
     closeList();
     input.blur();
+    if (typeof syncRosterFromPicks === 'function') syncRosterFromPicks();
   }
 
   input.addEventListener('focus', openList);
@@ -525,6 +529,82 @@ function setupCombobox(comboEl) {
   });
 }
 document.querySelectorAll('.combo').forEach(setupCombobox);
+
+/* ==================== Group Rosters <-> Make Your Picks: two-way sync ====================
+   Check a box on Group Rosters to pick a player (fills the next open dropdown slot for that
+   group on Make Your Picks); pick via the dropdown and it shows up checked + highlighted here.
+   Only primary picks are wired up -- alternates aren't touched by the checkboxes. */
+function getPrimaryPickCombos(gname) {
+  return Array.from(document.querySelectorAll('.combo[data-group="' + gname + '"]'))
+    .filter(c => c.dataset.slot !== 'alt');
+}
+function findComboHoldingName(gname, name) {
+  return getPrimaryPickCombos(gname).find(c => c.querySelector('.pick-select').value === name);
+}
+function findEmptyCombo(gname) {
+  return getPrimaryPickCombos(gname).find(c => c.querySelector('.pick-select').value === '');
+}
+function setComboValue(comboEl, name) {
+  const hidden = comboEl.querySelector('.pick-select');
+  const input = comboEl.querySelector('.combo-input');
+  hidden.value = name;
+  input.value = name ? displayName(name) : '';
+}
+function syncRosterFromPicks() {
+  document.querySelectorAll('.roster-cb').forEach(cb => {
+    const picked = !!findComboHoldingName(cb.dataset.group, cb.dataset.name);
+    cb.checked = picked;
+    const li = cb.closest('li');
+    if (li) li.classList.toggle('picked', picked);
+  });
+}
+let rosterFullTimer = null;
+function showRosterFullNote(li, gname) {
+  const existing = li.querySelector('.rosterFullMsg');
+  if (existing) existing.remove();
+  const note = document.createElement('span');
+  note.className = 'rosterFullMsg';
+  note.textContent = gname + ' is full -- uncheck one first';
+  li.appendChild(note);
+  clearTimeout(rosterFullTimer);
+  rosterFullTimer = setTimeout(() => note.remove(), 2500);
+}
+function initRosterCheckboxes() {
+  document.querySelectorAll('#panel-rosters .card').forEach(card => {
+    const h2 = card.querySelector('h2');
+    const m = h2 && h2.textContent.match(/Group\s+([A-Za-z])/);
+    const gname = m ? ('Group ' + m[1]) : null;
+    if (!gname) return;
+    card.querySelectorAll('.plist li').forEach(li => {
+      const pnameEl = li.querySelector('.pname');
+      if (!pnameEl) return;
+      const name = pnameEl.textContent.trim();
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.className = 'roster-cb';
+      cb.dataset.group = gname;
+      cb.dataset.name = name;
+      cb.addEventListener('change', () => {
+        if (cb.checked) {
+          const empty = findEmptyCombo(gname);
+          if (!empty) {
+            cb.checked = false;
+            showRosterFullNote(li, gname);
+            return;
+          }
+          setComboValue(empty, name);
+        } else {
+          const combo = findComboHoldingName(gname, name);
+          if (combo) setComboValue(combo, '');
+        }
+        syncRosterFromPicks();
+      });
+      li.insertBefore(cb, li.firstChild);
+    });
+  });
+}
+initRosterCheckboxes();
+syncRosterFromPicks();
 
 document.getElementById('eventLabel').textContent = TOURNAMENT_NAME;
 document.getElementById('courseInfo').textContent = COURSE_INFO;
