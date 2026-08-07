@@ -616,7 +616,7 @@ async function fetchScores() {
           if (Array.isArray(ls.linescores)) thru[period] = ls.linescores.length;
           const statCat = ls.statistics && ls.statistics.categories && ls.statistics.categories[0];
           const teeStat = statCat && statCat.stats && statCat.stats[statCat.stats.length - 1];
-          if (teeStat) teeTimes[period] = teeStat.displayValue;
+          if (teeStat && /[A-Za-z]/.test(teeStat.displayValue || "")) teeTimes[period] = teeStat.displayValue;
         }
       }
     }
