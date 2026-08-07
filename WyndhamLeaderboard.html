@@ -641,8 +641,8 @@ async function fetchScores() {
 
   return {
     map, eventName: event.name || TOURNAMENT_NAME,
-    status: (event.status && event.status.type && event.status.type.description) || "",
-    statusDetail: (event.status && event.status.type && event.status.type.detail) || "",
+    status: (comp.status && comp.status.type && comp.status.type.description) || (event.status && event.status.type && event.status.type.description) || "",
+    statusDetail: (comp.status && comp.status.type && comp.status.type.detail) || (event.status && event.status.type && event.status.type.detail) || "",
     lockTime, revealTime,
   };
 }
