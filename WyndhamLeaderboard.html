@@ -641,6 +641,7 @@ async function fetchScores() {
   return {
     map, eventName: event.name || TOURNAMENT_NAME,
     status: (event.status && event.status.type && event.status.type.description) || "",
+    statusDetail: (event.status && event.status.type && event.status.type.detail) || "",
     lockTime, revealTime,
   };
 }
@@ -1327,17 +1328,28 @@ function renderUnofficialBanners(scoreData) {
   const day3Complete = isRoundComplete(scoreData.map, 3);
   const day4Complete = isRoundComplete(scoreData.map, 4);
 
+  // ESPN reports a tournament-wide "Suspended" status (weather/darkness) rather than anything
+  // per-round -- pull the round number back out of the longer "Round N - Suspended" detail string
+  // so the note can call out exactly which day's leaderboard it applies to.
+  const isSuspended = /suspend/i.test(scoreData.status || "");
+  const suspendedMatch = (scoreData.statusDetail || "").match(/Round\s*(\d)/i);
+  const suspendedRound = suspendedMatch ? parseInt(suspendedMatch[1], 10) : null;
+  const suspendedNote = isSuspended
+    ? " Play is currently suspended" + (suspendedRound ? " for Round " + suspendedRound : "") +
+      " -- these scores reflect where things stood when it stopped."
+    : "";
+
   const configs = [
     { id: "unofficial-overall", complete: day4Complete,
-      text: "⚠ These are live, in-progress Overall standings -- unofficial until Round 4 is complete." },
+      text: "⚠ These are live, in-progress Overall standings -- unofficial until Round 4 is complete." + suspendedNote },
     { id: "unofficial-day1", complete: day1Complete,
-      text: "⚠ This is a live, in-progress Day 1 leaderboard -- unofficial until Round 1 is complete." },
+      text: "⚠ This is a live, in-progress Day 1 leaderboard -- unofficial until Round 1 is complete." + (suspendedRound === 1 ? suspendedNote : "") },
     { id: "unofficial-day2", complete: day2Complete,
-      text: "⚠ This is a live, in-progress Day 2 leaderboard -- unofficial until Round 2 is complete." },
+      text: "⚠ This is a live, in-progress Day 2 leaderboard -- unofficial until Round 2 is complete." + (suspendedRound === 2 ? suspendedNote : "") },
     { id: "unofficial-day3", complete: day3Complete,
-      text: "⚠ This is a live, in-progress Day 3 leaderboard -- unofficial until Round 3 is complete." },
+      text: "⚠ This is a live, in-progress Day 3 leaderboard -- unofficial until Round 3 is complete." + (suspendedRound === 3 ? suspendedNote : "") },
     { id: "unofficial-day4", complete: day4Complete,
-      text: "⚠ This is a live, in-progress Day 4 leaderboard -- unofficial until Round 4 is complete." },
+      text: "⚠ This is a live, in-progress Day 4 leaderboard -- unofficial until Round 4 is complete." + (suspendedRound === 4 ? suspendedNote : "") },
   ];
   for (const cfg of configs) {
     const el = document.getElementById(cfg.id);
