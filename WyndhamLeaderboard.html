@@ -190,6 +190,7 @@
     background:var(--lightgold); border:1px solid var(--gold); border-radius:8px;
     padding:10px 14px; font-size:.82rem; color:#5a4a10; margin-bottom:16px; line-height:1.5;
   }
+  .tb-suspended{background:var(--lightred); border-color:var(--red); color:#7a2018; font-weight:600;}
   .day-winner-banner{
     background:var(--lightgreen); border:2px solid var(--green); border-radius:8px;
     padding:14px 18px; text-align:center; font-size:1.05rem; font-weight:700;
@@ -256,11 +257,11 @@
     <div class="tab" data-panel="messages">Message Board</div>
   </div>
 
-  <div class="panel active" id="panel-overall"><div class="tb-provisional" id="unofficial-overall" style="display:none;"></div><div id="dayWinnerBanners-overall"></div><div class="card"><div class="note">Click on your name -- or anyone else's -- to jump straight to that scorecard.</div><div class="note">An entry needs more than 5 of their 15 picks still posting real scores (not cut or withdrawn) to stay eligible here -- entries that don't qualify are shown as DNQ below.</div><table id="tbl-overall"></table><div class="note" id="tbl-overall-note" style="display:none;">* = live running total (best 5 of however many of that entry's picks have posted so far) -- not final until 5+ have scores.</div></div></div>
-  <div class="panel" id="panel-day1"><div class="tb-provisional" id="unofficial-day1" style="display:none;"></div><div id="dayWinnerBanner-day1"></div><div class="card"><div class="note">Click on your name -- or anyone else's -- to jump straight to that scorecard.</div><table id="tbl-day1"></table><div class="note" id="tbl-day1-note" style="display:none;">* = live running total (best 10 of however many have posted so far) -- not final until 10+ have scores.</div></div></div>
-  <div class="panel" id="panel-day2"><div class="tb-provisional" id="unofficial-day2" style="display:none;"></div><div id="dayWinnerBanner-day2"></div><div class="card"><div class="note">Click on your name -- or anyone else's -- to jump straight to that scorecard.</div><table id="tbl-day2"></table><div class="note" id="tbl-day2-note" style="display:none;">* = live running total (best 10 of however many have posted so far) -- not final until 10+ have scores.</div></div></div>
-  <div class="panel" id="panel-day3"><div class="tb-provisional" id="unofficial-day3" style="display:none;"></div><div id="dayWinnerBanner-day3"></div><div class="card"><div class="note">Click on your name -- or anyone else's -- to jump straight to that scorecard.</div><div class="note">An entry needs more than 5 of their 15 picks still posting real scores (not cut or withdrawn) to stay eligible here -- entries that don't qualify are shown as DNQ below.</div><table id="tbl-day3"></table><div class="note" id="tbl-day3-note" style="display:none;">* = live running total (best 5 of however many have posted so far) -- not final until 5+ have scores.</div></div></div>
-  <div class="panel" id="panel-day4"><div class="tb-provisional" id="unofficial-day4" style="display:none;"></div><div id="dayWinnerBanner-day4"></div><div class="card"><div class="note">Click on your name -- or anyone else's -- to jump straight to that scorecard.</div><div class="note">An entry needs more than 5 of their 15 picks still posting real scores (not cut or withdrawn) to stay eligible here -- entries that don't qualify are shown as DNQ below.</div><table id="tbl-day4"></table><div class="note" id="tbl-day4-note" style="display:none;">* = live running total (best 5 of however many have posted so far) -- not final until 5+ have scores.</div></div></div>
+  <div class="panel active" id="panel-overall"><div class="tb-provisional tb-suspended" id="suspendedBanner-overall" style="display:none;"></div><div class="tb-provisional" id="unofficial-overall" style="display:none;"></div><div id="dayWinnerBanners-overall"></div><div class="card"><div class="note">Click on your name -- or anyone else's -- to jump straight to that scorecard.</div><div class="note">An entry needs more than 5 of their 15 picks still posting real scores (not cut or withdrawn) to stay eligible here -- entries that don't qualify are shown as DNQ below.</div><table id="tbl-overall"></table><div class="note" id="tbl-overall-note" style="display:none;">* = live running total (best 5 of however many of that entry's picks have posted so far) -- not final until 5+ have scores.</div></div></div>
+  <div class="panel" id="panel-day1"><div class="tb-provisional tb-suspended" id="suspendedBanner-day1" style="display:none;"></div><div class="tb-provisional" id="unofficial-day1" style="display:none;"></div><div id="dayWinnerBanner-day1"></div><div class="card"><div class="note">Click on your name -- or anyone else's -- to jump straight to that scorecard.</div><table id="tbl-day1"></table><div class="note" id="tbl-day1-note" style="display:none;">* = live running total (best 10 of however many have posted so far) -- not final until 10+ have scores.</div></div></div>
+  <div class="panel" id="panel-day2"><div class="tb-provisional tb-suspended" id="suspendedBanner-day2" style="display:none;"></div><div class="tb-provisional" id="unofficial-day2" style="display:none;"></div><div id="dayWinnerBanner-day2"></div><div class="card"><div class="note">Click on your name -- or anyone else's -- to jump straight to that scorecard.</div><table id="tbl-day2"></table><div class="note" id="tbl-day2-note" style="display:none;">* = live running total (best 10 of however many have posted so far) -- not final until 10+ have scores.</div></div></div>
+  <div class="panel" id="panel-day3"><div class="tb-provisional tb-suspended" id="suspendedBanner-day3" style="display:none;"></div><div class="tb-provisional" id="unofficial-day3" style="display:none;"></div><div id="dayWinnerBanner-day3"></div><div class="card"><div class="note">Click on your name -- or anyone else's -- to jump straight to that scorecard.</div><div class="note">An entry needs more than 5 of their 15 picks still posting real scores (not cut or withdrawn) to stay eligible here -- entries that don't qualify are shown as DNQ below.</div><table id="tbl-day3"></table><div class="note" id="tbl-day3-note" style="display:none;">* = live running total (best 5 of however many have posted so far) -- not final until 5+ have scores.</div></div></div>
+  <div class="panel" id="panel-day4"><div class="tb-provisional tb-suspended" id="suspendedBanner-day4" style="display:none;"></div><div class="tb-provisional" id="unofficial-day4" style="display:none;"></div><div id="dayWinnerBanner-day4"></div><div class="card"><div class="note">Click on your name -- or anyone else's -- to jump straight to that scorecard.</div><div class="note">An entry needs more than 5 of their 15 picks still posting real scores (not cut or withdrawn) to stay eligible here -- entries that don't qualify are shown as DNQ below.</div><table id="tbl-day4"></table><div class="note" id="tbl-day4-note" style="display:none;">* = live running total (best 5 of however many have posted so far) -- not final until 5+ have scores.</div></div></div>
   <div class="panel" id="panel-scorecards">
     <input type="text" class="searchbox" id="scSearch" placeholder="Search entry name…">
     <div class="note">Every entry's 15 picks, live round-by-round scores (vs. par), and running total. <span class="live-mark" style="background:var(--lightgold); padding:1px 6px; border-radius:4px; color:var(--text); font-weight:700;">highlighted</span> scores are the ones actually counting toward that column's total right now.</div>
@@ -1328,28 +1329,17 @@ function renderUnofficialBanners(scoreData) {
   const day3Complete = isRoundComplete(scoreData.map, 3);
   const day4Complete = isRoundComplete(scoreData.map, 4);
 
-  // ESPN reports a tournament-wide "Suspended" status (weather/darkness) rather than anything
-  // per-round -- pull the round number back out of the longer "Round N - Suspended" detail string
-  // so the note can call out exactly which day's leaderboard it applies to.
-  const isSuspended = /suspend/i.test(scoreData.status || "");
-  const suspendedMatch = (scoreData.statusDetail || "").match(/Round\s*(\d)/i);
-  const suspendedRound = suspendedMatch ? parseInt(suspendedMatch[1], 10) : null;
-  const suspendedNote = isSuspended
-    ? " Play is currently suspended" + (suspendedRound ? " for Round " + suspendedRound : "") +
-      " -- these scores reflect where things stood when it stopped."
-    : "";
-
   const configs = [
     { id: "unofficial-overall", complete: day4Complete,
-      text: "⚠ These are live, in-progress Overall standings -- unofficial until Round 4 is complete." + suspendedNote },
+      text: "⚠ These are live, in-progress Overall standings -- unofficial until Round 4 is complete." },
     { id: "unofficial-day1", complete: day1Complete,
-      text: "⚠ This is a live, in-progress Day 1 leaderboard -- unofficial until Round 1 is complete." + (suspendedRound === 1 ? suspendedNote : "") },
+      text: "⚠ This is a live, in-progress Day 1 leaderboard -- unofficial until Round 1 is complete." },
     { id: "unofficial-day2", complete: day2Complete,
-      text: "⚠ This is a live, in-progress Day 2 leaderboard -- unofficial until Round 2 is complete." + (suspendedRound === 2 ? suspendedNote : "") },
+      text: "⚠ This is a live, in-progress Day 2 leaderboard -- unofficial until Round 2 is complete." },
     { id: "unofficial-day3", complete: day3Complete,
-      text: "⚠ This is a live, in-progress Day 3 leaderboard -- unofficial until Round 3 is complete." + (suspendedRound === 3 ? suspendedNote : "") },
+      text: "⚠ This is a live, in-progress Day 3 leaderboard -- unofficial until Round 3 is complete." },
     { id: "unofficial-day4", complete: day4Complete,
-      text: "⚠ This is a live, in-progress Day 4 leaderboard -- unofficial until Round 4 is complete." + (suspendedRound === 4 ? suspendedNote : "") },
+      text: "⚠ This is a live, in-progress Day 4 leaderboard -- unofficial until Round 4 is complete." },
   ];
   for (const cfg of configs) {
     const el = document.getElementById(cfg.id);
@@ -1363,6 +1353,33 @@ function renderUnofficialBanners(scoreData) {
   }
 }
 
+// Independent of the isRoundComplete() heuristic above, which flips to "complete" as soon as
+// every golfer in the field has ANY live score posted -- not necessarily an actually-finished
+// round. A suspension can leave several groups mid-round while everyone else already has a
+// number, so this banner is driven purely by ESPN's own event-level status instead, and stays
+// independent of the unofficial banners' visibility.
+function renderSuspendedBanner(scoreData) {
+  const isSuspended = /suspend/i.test(scoreData.status || "");
+  const suspendedMatch = (scoreData.statusDetail || "").match(/Round\s*(\d)/i);
+  const suspendedRound = suspendedMatch ? parseInt(suspendedMatch[1], 10) : null;
+  const text = suspendedRound
+    ? "⏸ Play has been suspended for Round " + suspendedRound + " -- scores reflect where things stood when it stopped."
+    : "⏸ Play has been suspended -- scores reflect where things stood when it stopped.";
+
+  const ids = ["suspendedBanner-overall", "suspendedBanner-day1", "suspendedBanner-day2", "suspendedBanner-day3", "suspendedBanner-day4"];
+  for (const id of ids) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    const isDayMatch = id === "suspendedBanner-day" + suspendedRound;
+    const isOverall = id === "suspendedBanner-overall";
+    if (isSuspended && (isOverall || isDayMatch)) {
+      el.textContent = text;
+      el.style.display = "block";
+    } else {
+      el.style.display = "none";
+    }
+  }
+}
 // Produces a full finishing order for a group of same-score entrants, using the tiebreak rule.
 // Returns an array of "clusters" in finishing order -- most clusters are a single entrant, but a
 // cluster has more than one entrant when they're genuinely tied even after all 15 picks (their
@@ -1928,6 +1945,7 @@ async function refreshAll() {
     renderDayTable("tbl-day4", rankWithTies(computed, "day4"), "day4", "Day 4", dnqEntrants);
     renderUnofficialBanners(scoreData);
     renderDayWinnerBanners();
+    renderSuspendedBanner(scoreData);
     renderScorecards(computed.slice().sort((a, b) =>
       (a.lastName || a.fullName).localeCompare(b.lastName || b.fullName) || a.fullName.localeCompare(b.fullName)
     ), !!scoreData.revealTime);
