@@ -585,9 +585,10 @@ async function fetchScores() {
   // field at all (ANY competitor has a period-3 linescore entry -- even just a "-" placeholder for
   // "hasn't teed off yet"), anyone whose linescores array has NO period-3 entry at all didn't make
   // the cut. Verified against ESPN's own site data: 100% match across the full 147-player field.
-  const round3Available = competitors.some(c =>
-    Array.isArray(c.linescores) && c.linescores.some(ls => ls.period === 3)
-  );
+  const round3Available = competitors.some(c => {
+    const r3 = Array.isArray(c.linescores) ? c.linescores.find(ls => ls.period === 3) : null;
+    return r3 && Array.isArray(r3.linescores);
+  });
   for (const c of competitors) {
     const rawName = c.athlete && c.athlete.displayName;
     if (!rawName) continue;
@@ -611,11 +612,11 @@ async function fetchScores() {
         // A round that hasn't started for ANYONE yet still shows up here as a bare {period: N}
         // placeholder with no linescores/statistics at all -- must require the real array so that
         // placeholder doesn't get read as "0 holes played" and mask the round actually in progress.
-        if (period >= 1 && period <= 4 && Array.isArray(ls.linescores)) {
-          thru[period] = ls.linescores.length;
+        if (period >= 1 && period <= 4) {
+          if (Array.isArray(ls.linescores)) thru[period] = ls.linescores.length;
           const statCat = ls.statistics && ls.statistics.categories && ls.statistics.categories[0];
           const teeStat = statCat && statCat.stats && statCat.stats[statCat.stats.length - 1];
-          teeTimes[period] = teeStat ? teeStat.displayValue : null;
+          if (teeStat) teeTimes[period] = teeStat.displayValue;
         }
       }
     }
@@ -700,10 +701,10 @@ function golferLiveStatus(golfer) {
   if (golfer.cut) return { text: "CUT", cls: "sc-live-cut" };
   for (let n = 4; n >= 1; n--) {
     const holesThru = golfer["thru" + n];
-    if (holesThru != null) {
-      if (holesThru >= 18) return { text: "F", cls: "sc-live-final" };
-      if (holesThru > 0) return { text: "Thru " + holesThru, cls: "sc-live-inprogress" };
-      const tee = golfer["tee" + n];
+    const tee = golfer["tee" + n];
+    if (holesThru != null || tee != null) {
+      if (holesThru != null && holesThru >= 18) return { text: "F", cls: "sc-live-final" };
+      if (holesThru != null && holesThru > 0) return { text: "Thru " + holesThru, cls: "sc-live-inprogress" };
       return tee ? { text: formatTeeTime(tee), cls: "sc-live-tee" } : null;
     }
   }
