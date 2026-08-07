@@ -712,9 +712,20 @@ function golferLiveStatus(golfer) {
 }
 
 function formatTeeTime(raw) {
-  const d = new Date(raw);
-  if (isNaN(d.getTime())) return "";
-  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  if (!raw) return "";
+  // ESPN's tee-time string looks like "Fri Aug 07 13:05:00 PDT 2026" -- confirmed against a
+  // real tee sheet that the HH:MM here is ALREADY the tournament's Eastern wall-clock time;
+  // the "PDT" label is a fixed ESPN backend artifact, not the real zone. Parsing this as a
+  // real Date and converting (via the viewer's own device timezone, no less) shifts it to
+  // the wrong time for everyone. Pull the hour/minute straight out of the string instead.
+  const m = String(raw).match(/(\d{1,2}):(\d{2}):\d{2}/);
+  if (!m) return "";
+  let hour = parseInt(m[1], 10);
+  const minute = m[2];
+  const ampm = hour >= 12 ? "PM" : "AM";
+  hour = hour % 12;
+  if (hour === 0) hour = 12;
+  return hour + ":" + minute + " " + ampm + " ET";
 }
 
 function golferTotal(golfer, r1, r2, r3, r4) {
